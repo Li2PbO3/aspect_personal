@@ -150,6 +150,9 @@ namespace aspect
         // if it's false, then the model degrades to a simple melt transport model
         // without thermodynamic equilibrium calculation and melting/freezing source term
         bool enable_equilibrium_calculation;
+        bool enable_chemical_reaction_rate;
+
+        bool fill_debug_fields;
         
         // select a method to solve the equilibrium 
         std::string equilibrium_solving_method;

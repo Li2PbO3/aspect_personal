@@ -118,9 +118,9 @@ ENDIF()
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
 PROJECT(${TARGET} CXX)
 
-# The switch of custom melt equations, can be enabled with -DASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD=ON
-option(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD "Enable custom melt equations in melt.cc" OFF)
-message(STATUS "ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD = '${ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD}'")
+# # The switch of custom melt equations, can be enabled with -DASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD=ON
+# option(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD "Enable custom melt equations in melt.cc" OFF)
+# message(STATUS "ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD = '${ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD}'")
 
 
 SET(FORCE_COLORED_OUTPUT ON CACHE BOOL "Forces colored output when compiling with gcc and clang.")
@@ -528,12 +528,12 @@ ELSE()
   DEAL_II_SETUP_TARGET(${TARGET})
 ENDIF()
 
-# Convert the switch to a compile definition, applied to all generated targets
-if(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
-  foreach(_T ${TARGETS})
-    target_compile_definitions(${_T} PRIVATE ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
-  endforeach()
-endif()
+# # Convert the switch to a compile definition, applied to all generated targets
+# if(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
+#   foreach(_T ${TARGETS})
+#     target_compile_definitions(${_T} PRIVATE ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
+#   endforeach()
+# endif()
 
 # deal.II does not define NDEBUG, but the world builder relies on it to disable
 # its asserts in release mode. Set it manually for anything but debug mode.

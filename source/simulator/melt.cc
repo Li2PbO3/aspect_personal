@@ -42,12 +42,12 @@
 #include <deal.II/grid/filtered_iterator.h>
 #include <deal.II/grid/grid_tools.h>
 
-#  pragma message("Compiling melt.cc")
-#if defined(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
-#  pragma message("ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD is ON")
-#else
-#  pragma message("ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD is OFF")
-#endif
+// #  pragma message("Compiling melt.cc")
+// #if defined(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
+// #  pragma message("ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD is ON")
+// #else
+// #  pragma message("ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD is OFF")
+// #endif
 
 namespace aspect
 {
@@ -193,21 +193,6 @@ namespace aspect
              ||
              outputs.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>>()->rhs_u.size()
              == n_points, ExcInternalError());
-
-// // this part of code should be in material model.
-// // however get_artificial_viscosity() need this
-// # if defined(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
-//       if (this->get_melt_handler().melt_parameters.melt_without_porosity_advection_field
-//           && outputs.template get_additional_output<MaterialModel::PrescribedFieldOutputs<dim>>() == nullptr)
-//         {
-//           const unsigned int n_points = outputs.n_evaluation_points();
-//           outputs.additional_outputs.push_back(
-//             // we create prescribed field outputs for all compositional fields
-//             // but we only use the first one for porosity. [q][0] is the porosity at point q.
-//             std::make_unique<MaterialModel::PrescribedFieldOutputs<dim>> (n_points, this->n_compositional_fields())
-//           );
-//         }
-// # endif
     }
 
 
@@ -1771,14 +1756,14 @@ namespace aspect
                            "accuracy and convergence behavior of the melt velocity is important "
                            "(like in benchmark cases with an analytical solution), this parameter "
                            "should probably be set to 'false'.");
-# if defined(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
-        prm.declare_entry ("Melt without porosity advection field", "false",
-                            Patterns::Bool (),
-                            "Whether to use the melt model without advecting the porosity field. "
-                            "This is only for testing purposes. In this mode, the porosity field is "
-                            "not advected, but set to the equilibrium melt fraction at each time step. "
-                            "This option requires that the model does not use operator splitting.");
-# endif
+// # if defined(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
+//         prm.declare_entry ("Melt without porosity advection field", "false",
+//                             Patterns::Bool (),
+//                             "Whether to use the melt model without advecting the porosity field. "
+//                             "This is only for testing purposes. In this mode, the porosity field is "
+//                             "not advected, but set to the equilibrium melt fraction at each time step. "
+//                             "This option requires that the model does not use operator splitting.");
+// # endif
       }
       prm.leave_subsection();
 
@@ -1796,13 +1781,13 @@ namespace aspect
         heat_advection_by_melt = prm.get_bool("Heat advection by melt");
         use_discontinuous_p_c = prm.get_bool("Use discontinuous compaction pressure");
         average_melt_velocity = prm.get_bool("Average melt velocity");
-# if defined(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
-        melt_without_porosity_advection_field = prm.get_bool("Melt without porosity advection field");
-#else
-        AssertThrow(!melt_without_porosity_advection_field,
-                    ExcMessage("Error: ASPECT was compiled without the macro ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD=ON, "
-                                "so the option 'Melt without porosity advection field' can not be set to true."));
-#endif
+// # if defined(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
+//         melt_without_porosity_advection_field = prm.get_bool("Melt without porosity advection field");
+// #else
+//         AssertThrow(!melt_without_porosity_advection_field,
+//                     ExcMessage("Error: ASPECT was compiled without the macro ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD=ON, "
+//                                 "so the option 'Melt without porosity advection field' can not be set to true."));
+// #endif
       }
       prm.leave_subsection();
     }

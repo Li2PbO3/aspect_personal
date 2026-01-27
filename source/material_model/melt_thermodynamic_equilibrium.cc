@@ -29,12 +29,12 @@
 
 #  pragma message("Compiling melt_thermodynamic_equilibrium.cc")
 
-// to use pcout for debugging output
-#include <aspect/simulator.h>
-namespace
-{
-  const bool local_debug = true;
-}
+// // to use pcout for debugging output
+// #include <aspect/simulator.h>
+// namespace
+// {
+//   const bool local_debug = true;
+// }
 
 namespace aspect
 {
@@ -618,9 +618,9 @@ namespace aspect
             {
               std::vector<double> temp_field(in.n_evaluation_points());
               // if (c == porosity_idx) continue;
-              // fe_value.value_list(in.position,
-              //                     temp_field,
-              //                     this->introspection().component_indices.compositional_fields[c]);
+              fe_value.value_list(in.position,
+                                  temp_field,
+                                  this->introspection().component_indices.compositional_fields[c]);
               for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
                 {
                   if (c == porosity_idx)
@@ -833,7 +833,10 @@ namespace aspect
                           {
                             prescribed_field_out->prescribed_field_outputs[i][c] = c_eq;
                           }
-                        out.reaction_terms[i][c] = (c_eq - old_fields[i][c]);
+                        if (enable_chemical_reaction_rate) 
+                          out.reaction_terms[i][c] = (c_eq - old_fields[i][c]);
+                        else
+                          out.reaction_terms[i][c] = 0.0;
                       }
                       else
                       {
@@ -847,8 +850,6 @@ namespace aspect
                       // fill reaction rate outputs if the model uses operator splitting
                       if (this->get_parameters().use_operator_splitting)
                         {
-                          AssertThrow(this->get_melt_handler().melt_parameters.melt_without_porosity_advection_field == false,
-                                      ExcMessage("Operator splitting with prescribed porosity field is not supported."));
                           if (reaction_rate_out != nullptr)
                             {
                               if (c == porosity_idx && this->get_timestep_number() > 0)
@@ -881,10 +882,13 @@ namespace aspect
                   if (prescribed_field_out != nullptr)
                     {
                       // temporary output c_bulk_an for debugging
-                      // prescribed_field_out->prescribed_field_outputs[i][5] = bulk_concentrations[0]; // c_bulk_ol
-                      // prescribed_field_out->prescribed_field_outputs[i][6] = bulk_concentrations[1]; // c_bulk_an
-                      // prescribed_field_out->prescribed_field_outputs[i][5] = old_fields[i][liquid_indices[1]];
-                      // prescribed_field_out->prescribed_field_outputs[i][6] = in.composition[i][liquid_indices[1]];
+                      // TODO: write a paragraph to find and match debug_field_indices
+                      if (fill_debug_fields)
+                        {
+                          prescribed_field_out->prescribed_field_outputs[i][5] = (c_liquid_eq_values[0] - old_fields[i][liquid_indices[0]]);
+                          prescribed_field_out->prescribed_field_outputs[i][6] = (c_liquid_eq_values[1] - old_fields[i][liquid_indices[1]]);
+                          prescribed_field_out->prescribed_field_outputs[i][7] = (eq_melt_fraction - old_porosity[i]);
+                        }
                     }
 
                 }  
@@ -923,9 +927,9 @@ namespace aspect
               // this is old porosity
               double porosity = std::max(in.composition[i][porosity_idx],0.0);
 
-              // seems unnecessary to fill melt_out for porosity here
-              // for we've fill it as the prescribed field.
-              melt_out->porosities[i] = 0.0;
+              // // seems unnecessary to fill melt_out for porosity here
+              // // for we've fill it as the prescribed field.
+              // melt_out->porosities[i] = 0.0;
 
               melt_out->fluid_viscosities[i] = eta_f;
               melt_out->permeabilities[i] = reference_permeability * Utilities::fixed_power<3>(porosity) * Utilities::fixed_power<2>(1.0-porosity);
@@ -1036,6 +1040,15 @@ namespace aspect
                              "based on the local temperature, pressure, and composition. If false, "
                              "then the model degrades to a simple melt transport model "
                              "without thermodynamic equilibrium calculation and melting/freezing source term.");
+          prm.declare_entry ("Enable chemical reaction rate", "true",
+                             Patterns::Bool (),
+                             "Choosing if the material model gives out reaction_rate vector"
+                             "for advection equations. If false, the reaction_rate vector would be zeros.");
+          prm.declare_entry ("Fill debug fields", "true",
+                             Patterns::Bool (),
+                             "Whether to fill debug fields for melt model. "
+                             "If true, some debug fields will be filled in the prescribed_field_outputs. "
+                             "These fields can be used for debugging purposes.");
 
           prm.declare_entry ("Equilibrium solving method", "bisection",
                              Patterns::Selection ("bisection|newton"),
@@ -1186,13 +1199,14 @@ namespace aspect
           melting_time_scale                = prm.get_double ("Melting time scale for operator splitting");
 
           enable_equilibrium_calculation    = prm.get_bool ("Enable equilibrium calculation");
+          enable_chemical_reaction_rate     = prm.get_bool ("Enable chemical reaction rate");
+          fill_debug_fields                 = prm.get_bool ("Fill debug fields");
 
           equilibrium_solving_method = prm.get ("Equilibrium solving method");
 
-          AssertThrow(!(this->get_melt_handler().melt_parameters.melt_without_porosity_advection_field 
-                        && this->get_parameters().use_operator_splitting),
+          AssertThrow(this->get_parameters().use_operator_splitting == false,
                       ExcMessage("Error: Material model Melt thermodynamic equilibrium "
-                                 "can not use the option 'Melt without porosity advection field' together with operator splitting."));
+                                 "can not support operator splitting."));
 
           // parse chemical component number
           n_components = prm.get_integer ("Number of chemical components");
@@ -1329,8 +1343,7 @@ namespace aspect
     void
     MeltThermodynamicEquilibrium<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      if (this->get_melt_handler().melt_parameters.melt_without_porosity_advection_field
-          && out.template get_additional_output<MaterialModel::PrescribedFieldOutputs<dim>>() == nullptr)
+      if (out.template get_additional_output<MaterialModel::PrescribedFieldOutputs<dim>>() == nullptr)
         {
           // AssertThrow(false, ExcMessage("Successfully run in to create_additional_named_outputs method."))
           const unsigned int n_points = out.n_evaluation_points();
