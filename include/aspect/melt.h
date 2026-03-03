@@ -28,12 +28,12 @@
 #include <aspect/material_model/interface.h>
 #include <aspect/boundary_fluid_pressure/interface.h>
 
-// #  pragma message("Compiling melt.h")
-// #if defined(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
-// #  pragma message("ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD is ON")
-// #else
-// #  pragma message("ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD is OFF")
-// #endif
+#  pragma message("Compiling melt.h")
+#if defined(ASPECT_MELT_ADVECTING_BULK_CONCENTRATIONS)
+#  pragma message("ASPECT_MELT_ADVECTING_BULK_CONCENTRATIONS is ON")
+#else
+#  pragma message("ASPECT_MELT_ADVECTING_BULK_CONCENTRATIONS is OFF")
+#endif
 
 namespace aspect
 {
@@ -91,11 +91,10 @@ namespace aspect
           permeabilities.resize(n_points);
           fluid_densities.resize(n_points);
           fluid_density_gradients.resize(n_points, Tensor<1,dim>());
-// # if defined(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
-//           // In the custom melt equations, we need to output the porosity 
-//           // for we do not have a separate advection field for porosity.
-//           porosities.resize(n_points);
-// # endif
+# if defined(ASPECT_MELT_ADVECTING_BULK_CONCENTRATIONS)
+          concentrations_in_phases.resize(n_points);
+          concentration_gradients_in_phases.resize(n_points);
+# endif
         }
 
         /**
@@ -128,11 +127,21 @@ namespace aspect
          */
         std::vector<Tensor<1,dim>> fluid_density_gradients;
 
-// # if defined(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
-//         // In the custom melt equations, we need to output the porosity 
-//         // for we do not have a separate advection field for porosity.
-//         std::vector<double> porosities;
-// # endif
+# if defined(ASPECT_MELT_ADVECTING_BULK_CONCENTRATIONS)
+        // we need to output concentration of components in phases and their gradients
+        // Here is a standard vector with a length corresponding to the number of quadrature point
+        // containing standard vectors with a length corresponding to the number of compositional fields
+        // (Yes, only the composition field corresponding to the chemical components will be filled.)
+        // containing pairs of concentration values in solid and fluid phases
+        // first: solid phase, second: fluid phase
+        std::vector<std::vector<std::pair<double, double>>> concentrations_in_phases; 
+        // Here is a standard vector with a length corresponding to the number of quadrature point
+        // containing standard vectors with a length corresponding to the number of compositional fields
+        // (Yes, only the composition field corresponding to the chemical components will be filled.)
+        // containing pairs of dealii::Tensor<1,dim> for concentration gradient values in solid and fluid phases
+        // first: solid phase, second: fluid phase
+        std::vector<std::vector<std::pair<Tensor<1,dim>, Tensor<1,dim>>>> concentration_gradients_in_phases; 
+# endif
 
         /**
          * Do the requested averaging operation for the melt outputs.

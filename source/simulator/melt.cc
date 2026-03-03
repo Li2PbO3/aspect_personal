@@ -42,12 +42,17 @@
 #include <deal.II/grid/filtered_iterator.h>
 #include <deal.II/grid/grid_tools.h>
 
-// #  pragma message("Compiling melt.cc")
-// #if defined(ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD)
-// #  pragma message("ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD is ON")
-// #else
-// #  pragma message("ASPECT_MELT_WITHOUT_POROSITY_ADVECTION_FIELD is OFF")
-// #endif
+#  pragma message("Compiling melt.cc")
+#if defined(ASPECT_MELT_ADVECTING_BULK_CONCENTRATIONS)
+#  pragma message("ASPECT_MELT_ADVECTING_BULK_CONCENTRATIONS is ON")
+#else
+#  pragma message("ASPECT_MELT_ADVECTING_BULK_CONCENTRATIONS is OFF")
+#endif
+
+namespace // for debugging purposes
+{
+  bool local_debug = true;
+}
 
 namespace aspect
 {
@@ -702,10 +707,11 @@ namespace aspect
       scratch.finite_element_values[ex_u_f].get_function_values (this->get_solution(),fluid_velocity_values);
 
       // average divergence u over the cell (needed for porosity advection)
+      // now we always compute divergence_u, because it is also needed for the bulk concentration advection
       double divergence_u = 0.0;
-      if (this->get_melt_handler().is_porosity(*scratch.advection_field))
-        for (unsigned int q=0; q<n_q_points; ++q)
-          divergence_u += scratch.current_velocity_divergences[q] * 1./n_q_points;
+      // if (this->get_melt_handler().is_porosity(*scratch.advection_field))
+      for (unsigned int q=0; q<n_q_points; ++q)
+        divergence_u += scratch.current_velocity_divergences[q] * 1./n_q_points;
 
       for (unsigned int q=0; q<n_q_points; ++q)
         {
@@ -795,6 +801,19 @@ namespace aspect
           // Subtract off the mesh velocity for ALE corrections if necessary
           if (this->get_parameters().mesh_deformation_enabled)
             current_u -= scratch.mesh_velocity_values[q];
+          
+          // A new RHS term for bulk concentration advection
+          const double bulk_concentration_rhs
+            = ((scratch.advection_field->is_temperature() || this->get_melt_handler().is_porosity(*scratch.advection_field))
+               ?
+               0.0
+               :
+               (
+                  + melt_outputs->concentrations_in_phases[q][scratch.advection_field->compositional_variable].second // second is for liquid phase
+                  * divergence_u // nabla u = - nabla q
+                  - (porosity * (fluid_velocity_values[q] - current_u)) // q = phi * (u_f - u_s)
+                  * melt_outputs->concentration_gradients_in_phases[q][scratch.advection_field->compositional_variable].second // second is for liquid phase
+               ));
 
           const double melt_transport_LHS =
             (this->get_melt_handler().is_porosity(*scratch.advection_field)
@@ -811,6 +830,17 @@ namespace aspect
                 0.0)
              :
              0.0);
+          
+          // A new LHS term for bulk concentration advection
+          const double bulk_concentration_lhs =
+            ((scratch.advection_field->is_temperature() || this->get_melt_handler().is_porosity(*scratch.advection_field))
+               ?
+               0.0
+               : 
+               divergence_u // nabla u = - nabla q
+            );
+
+          // Note: for now, we treat every advection field except T and phi as bulk concentration fields.
 
           const double factor = (use_bdf2_scheme)? ((2*time_step + old_time_step) /
                                                     (time_step + old_time_step)) : 1.0;
@@ -837,6 +867,32 @@ namespace aspect
               density_c_P_melt = 1.0;
             }
 
+          // if (local_debug)
+          //   {
+          //     const double current_position_1 = scratch.material_model_inputs.position[q][1];
+          //     const double catching_lower_bound = 17500.0;
+          //     const double catching_upper_bound = 25000.0;
+          //     if (catching_lower_bound <= current_position_1 && current_position_1 <= catching_upper_bound)
+          //       {
+          //         this->get_pcout() << "[MeltAdvectionAssemblyDebugOutput] At Y = "
+          //                           << current_position_1 << ": "
+          //                           << "porosity = "
+          //                           // << porosity << ", "
+          //                           // << "divergence_u = "
+          //                           // << divergence_u << ", "
+          //                           // << "bulk_concentration_lhs = "
+          //                           // << bulk_concentration_lhs << ", "
+          //                           // << "bulk_concentration_rhs = "
+          //                           // << bulk_concentration_rhs 
+          //                           << "c times divergence q = "
+          //                           << melt_outputs->concentrations_in_phases[q][scratch.advection_field->compositional_variable].second * divergence_u
+          //                           << ", "
+          //                           << "q dot gradient c = "
+          //                           << (porosity * (fluid_velocity_values[q] - current_u)) * melt_outputs->concentration_gradients_in_phases[q][scratch.advection_field->compositional_variable].second
+          //                           << std::endl;
+          //       }
+          //   }
+
           // do the actual assembly. note that we only need to loop over the advection
           // shape functions because these are the only contributions we compute here
           for (unsigned int i=0; i<advection_dofs_per_cell; ++i)
@@ -847,7 +903,10 @@ namespace aspect
                   scratch.phi_field[i]
                   * (gamma + melt_transport_RHS)
                   + scratch.phi_field[i]
-                  * reaction_term)
+                  * reaction_term
+                  + time_step *
+                  scratch.phi_field[i]
+                  * bulk_concentration_rhs)
                  *
                  scratch.finite_element_values.JxW(q);
 
@@ -864,6 +923,7 @@ namespace aspect
                           + (factor * scratch.phi_field[i] * scratch.phi_field[j])) *
                        (density_c_P_melt)
                        + time_step * scratch.phi_field[i] * scratch.phi_field[j] * melt_transport_LHS
+                       + time_step * scratch.phi_field[i] * scratch.phi_field[j] * bulk_concentration_lhs
                      )
                      * scratch.finite_element_values.JxW(q);
                 }
