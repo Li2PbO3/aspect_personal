@@ -479,6 +479,19 @@ namespace aspect
         bv.second->initialize ();
       }
 
+    // personaly attachment
+    for (const auto &p : parameters.prescribed_Neumann_boundary_indicators)
+      boundary_Neumann_condition[p.first]
+        = BoundaryNeumannCondition::create_boundary_Neumann_condition<dim> (p.second.second);
+    
+    for (auto &bnc : boundary_Neumann_condition)
+      {
+        if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(bnc.second.get()))
+          sim->initialize_simulator(*this);
+        bnc.second->parse_parameters (prm);
+        bnc.second->initialize ();
+      }
+
     std::set<types::boundary_id> open_velocity_boundary_indicators
       = geometry_model->get_used_boundary_indicators();
     for (const auto &p : boundary_velocity_manager.get_active_boundary_velocity_names())

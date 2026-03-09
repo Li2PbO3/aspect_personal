@@ -60,6 +60,7 @@ DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
 #include <aspect/boundary_velocity/interface.h>
 #include <aspect/boundary_fluid_pressure/interface.h>
 #include <aspect/boundary_traction/interface.h>
+#include <aspect/boundary_Neumann_condition/interface.h>
 #include <aspect/mesh_refinement/interface.h>
 #include <aspect/time_stepping/interface.h>
 #include <aspect/postprocess/interface.h>
@@ -1932,6 +1933,7 @@ namespace aspect
 #endif
       BoundaryVelocity::Manager<dim>                                         boundary_velocity_manager;
       std::map<types::boundary_id,std::unique_ptr<BoundaryTraction::Interface<dim>>> boundary_traction;
+      std::map<types::boundary_id,std::unique_ptr<BoundaryNeumannCondition::Interface<dim>>> boundary_Neumann_condition;
       const std::unique_ptr<BoundaryHeatFlux::Interface<dim>>                boundary_heat_flux;
 
       /**

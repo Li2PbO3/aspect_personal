@@ -93,6 +93,12 @@ namespace aspect
     template <int dim> class Interface;
   }
 
+  // personal attachment
+  namespace BoundaryNeumannCondition
+  {
+    template <int dim> class Interface;
+  }
+
   namespace BoundaryVelocity
   {
     template <int dim> class Manager;
@@ -601,6 +607,12 @@ namespace aspect
        */
       const std::map<types::boundary_id,std::unique_ptr<BoundaryTraction::Interface<dim>>> &
       get_boundary_traction () const;
+
+      /**
+       * Return a reference to the object that describes Neumann boundary conditions.
+       */
+      const std::map<types::boundary_id,std::unique_ptr<BoundaryNeumannCondition::Interface<dim>>> &
+      get_boundary_Neumann_condition () const;
 
       /**
        * Return a reference to the manager of the initial temperature models.

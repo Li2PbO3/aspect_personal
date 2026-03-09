@@ -133,6 +133,10 @@ namespace aspect
         assemblers->stokes_system_on_boundary_face.push_back(
           std::make_unique<aspect::Assemblers::StokesBoundaryTraction<dim>>());
       }
+    
+    // add the terms for Neumann boundary conditions
+    if (!boundary_Neumann_condition.empty())
+      {}
 
     // add the terms necessary to normalize the pressure
     if (do_pressure_rhs_compatibility_modification)

@@ -417,6 +417,15 @@ namespace aspect
 
 
   template <int dim>
+  const std::map<types::boundary_id,std::unique_ptr<BoundaryNeumannCondition::Interface<dim>>> &
+  SimulatorAccess<dim>::get_boundary_Neumann_condition () const
+  {
+    return simulator->boundary_Neumann_condition;
+  }
+
+
+
+  template <int dim>
   bool
   SimulatorAccess<dim>::has_boundary_temperature () const
   {

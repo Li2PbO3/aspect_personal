@@ -573,6 +573,14 @@ namespace aspect
     std::map<types::boundary_id, std::pair<std::string,std::string>> prescribed_traction_boundary_indicators;
 
     /**
+     * Map from boundary id to a pair "components", "Neumann boundary type",
+     * where components is of the format "[x][y][z]" and the Neumann boundary type is
+     * mapped to one of the plugins of Neumann boundary conditions (e.g.
+     * "function")
+     */
+    std::map<types::boundary_id, std::pair<std::string,std::string>> prescribed_Neumann_boundary_indicators;
+
+    /**
      * A set of boundary ids on which the boundary_heat_flux objects
      * will be applied.
      */
