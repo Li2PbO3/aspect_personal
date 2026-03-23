@@ -935,7 +935,9 @@ namespace aspect
               // melt_out->porosities[i] = 0.0;
 
               melt_out->fluid_viscosities[i] = eta_f;
-              melt_out->permeabilities[i] = reference_permeability * Utilities::fixed_power<3>(porosity) * Utilities::fixed_power<2>(1.0-porosity);
+              // here we set the permeability to be proportional to phi^3 instead of phi^3*(1-phi)^2 temporarily.
+              // because we want to keep it the same to the solitary wave benchmark.
+              melt_out->permeabilities[i] = reference_permeability * Utilities::fixed_power<3>(porosity) * Utilities::fixed_power<0>(1.0-porosity);
               melt_out->fluid_density_gradients[i] = Tensor<1,dim>();
 
               // temperature dependence of density is 1 - alpha * (T - T(adiabatic))
@@ -2396,7 +2398,9 @@ namespace aspect
             {
               double porosity = std::max(in.composition[i][porosity_idx],0.0);
               melt_out->fluid_viscosities[i] = eta_f;
-              melt_out->permeabilities[i] = reference_permeability * Utilities::fixed_power<3>(porosity) * Utilities::fixed_power<2>(1.0-porosity);
+              // here we set the permeability to be proportional to phi^3 instead of phi^3*(1-phi)^2 temporarily.
+              // because we want to keep it the same to the solitary wave benchmark.
+              melt_out->permeabilities[i] = reference_permeability * Utilities::fixed_power<3>(porosity) * Utilities::fixed_power<0>(1.0-porosity);
               melt_out->fluid_density_gradients[i] = Tensor<1,dim>();
 
               // temperature dependence of density is 1 - alpha * (T - T(adiabatic))

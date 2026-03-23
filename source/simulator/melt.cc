@@ -877,18 +877,19 @@ namespace aspect
           //         this->get_pcout() << "[MeltAdvectionAssemblyDebugOutput] At Y = "
           //                           << current_position_1 << ": "
           //                           << "porosity = "
-          //                           // << porosity << ", "
-          //                           // << "divergence_u = "
-          //                           // << divergence_u << ", "
-          //                           // << "bulk_concentration_lhs = "
-          //                           // << bulk_concentration_lhs << ", "
-          //                           // << "bulk_concentration_rhs = "
-          //                           // << bulk_concentration_rhs 
-          //                           << "c times divergence q = "
-          //                           << melt_outputs->concentrations_in_phases[q][scratch.advection_field->compositional_variable].second * divergence_u
+          //                           << porosity << ", "
+          //                           << "divergence_u = "
+          //                           << divergence_u << ", "
+          //                           << "bulk_concentration_lhs = "
+          //                           << bulk_concentration_lhs << ", "
+          //                           << "bulk_concentration_rhs = "
+          //                           << bulk_concentration_rhs 
           //                           << ", "
-          //                           << "q dot gradient c = "
-          //                           << (porosity * (fluid_velocity_values[q] - current_u)) * melt_outputs->concentration_gradients_in_phases[q][scratch.advection_field->compositional_variable].second
+          //                           << "c = "
+          //                           << melt_outputs->concentrations_in_phases[q][scratch.advection_field->compositional_variable].second
+          //                           << ", "
+          //                           << "gradient c = "
+          //                           << melt_outputs->concentration_gradients_in_phases[q][scratch.advection_field->compositional_variable].second
           //                           << std::endl;
           //       }
           //   }
