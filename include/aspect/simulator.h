@@ -776,6 +776,13 @@ namespace aspect
                                                           std::vector<double> *initial_residual = nullptr);
 
       /**
+       * Fill prescribed fields with a method.
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void fill_prescribed_fields ();
+
+      /**
        * Assemble and solve the Stokes equation.
        * This function returns the nonlinear residual after solving
        * and can optionally compute and store an initial

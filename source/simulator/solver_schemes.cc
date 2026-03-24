@@ -303,16 +303,16 @@ namespace aspect
 
             case Parameters<dim>::AdvectionFieldMethod::prescribed_field:
             {
-              TimerOutput::Scope timer (computing_timer, "Interpolate prescribed composition");
+              // TimerOutput::Scope timer (computing_timer, "Interpolate prescribed composition");
 
-              interpolate_material_output_into_advection_field(adv_field);
+              // interpolate_material_output_into_advection_field(adv_field);
 
-              // Call the signal in case the user wants to do something with the variable:
-              SolverControl dummy;
-              signals.post_advection_solver(*this,
-                                            adv_field.is_temperature(),
-                                            adv_field.compositional_variable,
-                                            dummy);
+              // // Call the signal in case the user wants to do something with the variable:
+              // SolverControl dummy;
+              // signals.post_advection_solver(*this,
+              //                               adv_field.is_temperature(),
+              //                               adv_field.compositional_variable,
+              //                               dummy);
               break;
             }
 
@@ -347,6 +347,13 @@ namespace aspect
     // all fields, so that we use the same point in time for every field when solving
     for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
       {
+        const AdvectionField adv_field (AdvectionField::composition(c));
+        const typename Parameters<dim>::AdvectionFieldMethod::Kind method = adv_field.advection_method(introspection);
+
+        // skip prescribed fields, as they are not handled in this method.
+        if (method == Parameters<dim>::AdvectionFieldMethod::prescribed_field)
+          continue;
+
         current_linearization_point.block(introspection.block_indices.compositional_fields[c])
           = solution.block(introspection.block_indices.compositional_fields[c]);
 
@@ -359,6 +366,51 @@ namespace aspect
     return current_residual;
   }
 
+  // we fill prescribed fields with a method.
+  // prepare to call it after compositional field advection.
+  template <int dim>
+  void Simulator<dim>::fill_prescribed_fields()
+  {
+    for (unsigned int c=0; c < introspection.n_compositional_fields; ++c)
+      {
+        const AdvectionField adv_field (AdvectionField::composition(c));
+        const typename Parameters<dim>::AdvectionFieldMethod::Kind method = adv_field.advection_method(introspection);
+        switch (method)
+          {
+            case Parameters<dim>::AdvectionFieldMethod::prescribed_field:
+            {
+              TimerOutput::Scope timer (computing_timer, "Interpolate prescribed composition");
+
+              interpolate_material_output_into_advection_field(adv_field);
+
+              // Call the signal in case the user wants to do something with the variable:
+              SolverControl dummy;
+              signals.post_advection_solver(*this,
+                                            adv_field.is_temperature(),
+                                            adv_field.compositional_variable,
+                                            dummy);
+              break;
+            }
+
+            default:
+              // do nothing for other fields
+              break;
+          }        
+      }
+    
+    for (unsigned int c=0; c < introspection.n_compositional_fields; ++c)
+      {
+        const AdvectionField adv_field (AdvectionField::composition(c));
+        const typename Parameters<dim>::AdvectionFieldMethod::Kind method = adv_field.advection_method(introspection);
+
+        if (method == Parameters<dim>::AdvectionFieldMethod::prescribed_field)
+          {
+            // update the current linearization point for the prescribed fields as well, so that they are available for the next time step
+            current_linearization_point.block(introspection.block_indices.compositional_fields[c])
+              = solution.block(introspection.block_indices.compositional_fields[c]);
+          }
+      }
+  }
 
 
   template <int dim>
@@ -761,6 +813,7 @@ namespace aspect
   {
     assemble_and_solve_temperature();
     assemble_and_solve_composition();
+    fill_prescribed_fields();
     assemble_and_solve_stokes();
 
     if (parameters.run_postprocessors_on_nonlinear_iterations)
@@ -913,6 +966,7 @@ namespace aspect
 
     assemble_and_solve_temperature();
     assemble_and_solve_composition();
+    fill_prescribed_fields();
 
     double relative_residual = std::numeric_limits<double>::max();
     nonlinear_iteration = 0;
@@ -997,6 +1051,8 @@ namespace aspect
 
         const std::vector<double>  relative_composition_residual =
           assemble_and_solve_composition(nonlinear_iteration == 0, &initial_composition_residual);
+        
+        fill_prescribed_fields();
 
         // write the residual output in the same order as the solutions
         pcout << "      Relative nonlinear residuals (temperature, compositional fields): " << relative_temperature_residual;
@@ -1117,6 +1173,8 @@ namespace aspect
 
         const std::vector<double>  relative_composition_residual =
           assemble_and_solve_composition(nonlinear_iteration == 0, &initial_composition_residual);
+        
+        fill_prescribed_fields();
 
         const double relative_nonlinear_stokes_residual =
           assemble_and_solve_stokes(nonlinear_iteration == 0, &initial_stokes_residual);
@@ -1170,6 +1228,8 @@ namespace aspect
     assemble_and_solve_temperature();
 
     assemble_and_solve_composition();
+
+    fill_prescribed_fields();
 
     // ...and then iterate the solution of the Stokes system
     double initial_stokes_residual = 0;
@@ -1266,6 +1326,8 @@ namespace aspect
         assemble_and_solve_temperature();
         assemble_and_solve_composition();
 
+        fill_prescribed_fields();
+
         if (use_picard == true &&
             nonlinear_solver_control_picard.check(nonlinear_iteration, relative_residual) != SolverControl::iterate)
           {
@@ -1324,6 +1386,8 @@ namespace aspect
     // First assemble and solve the temperature and compositional fields
     assemble_and_solve_temperature();
     assemble_and_solve_composition();
+
+    fill_prescribed_fields();
 
     // Now store the linear_tolerance we started out with, because we might change
     // it within this timestep.
@@ -1429,6 +1493,8 @@ namespace aspect
   {
     assemble_and_solve_temperature();
     assemble_and_solve_composition();
+    
+    fill_prescribed_fields();
 
     {
       TimerOutput::Scope timer (computing_timer, "Interpolate Stokes solution");
@@ -1497,6 +1563,7 @@ namespace aspect
 #define INSTANTIATE(dim) \
   template double Simulator<dim>::assemble_and_solve_temperature(const bool, double*); \
   template std::vector<double> Simulator<dim>::assemble_and_solve_composition(const bool, std::vector<double> *); \
+  template void Simulator<dim>::fill_prescribed_fields(); \
   template double Simulator<dim>::assemble_and_solve_stokes(const bool, double*); \
   template void Simulator<dim>::solve_single_advection_single_stokes(); \
   template void Simulator<dim>::solve_no_advection_iterated_stokes(); \

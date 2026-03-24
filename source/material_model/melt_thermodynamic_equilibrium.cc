@@ -1958,23 +1958,23 @@ namespace aspect
           // fe_value.value_list(in.position,
           //                     old_porosity,
           //                     this->introspection().component_indices.compositional_fields[porosity_idx]);
-          for(unsigned int c=0; c<this->introspection().n_compositional_fields; ++c)
-            {
-              std::vector<double> temp_field(in.n_evaluation_points());
-              // if (c == porosity_idx) continue;
-              fe_value.value_list(in.position,
-                                  temp_field,
-                                  this->introspection().component_indices.compositional_fields[c]);
-              for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
-                {
-                  if (c == porosity_idx)
-                    old_porosity[i] = temp_field[i];
-                  old_fields[i][c] = temp_field[i];
-                }
-            }
+          // for(unsigned int c=0; c<this->introspection().n_compositional_fields; ++c)
+          //   {
+          //     std::vector<double> temp_field(in.n_evaluation_points());
+          //     // if (c == porosity_idx) continue;
+          //     fe_value.value_list(in.position,
+          //                         temp_field,
+          //                         this->introspection().component_indices.compositional_fields[c]);
+          //     for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
+          //       {
+          //         if (c == porosity_idx)
+          //           old_porosity[i] = temp_field[i];
+          //         old_fields[i][c] = temp_field[i];
+          //       }
+          //   }
 
-          // // temporary fix: use current_linearization_point as old_field
-          // old_fields = in.composition;
+          // temporary fix: use current_linearization_point as old_field
+          old_fields = in.composition;
           // for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
           // {
           //   const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
