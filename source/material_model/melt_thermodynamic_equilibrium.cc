@@ -29,12 +29,12 @@
 
 #  pragma message("Compiling melt_thermodynamic_equilibrium.cc")
 
-// // to use pcout for debugging output
-// #include <aspect/simulator.h>
-// namespace
-// {
-//   const bool local_debug = true;
-// }
+// to use pcout for debugging output
+# include <aspect/simulator.h>
+namespace
+{
+  const bool local_debug = true;
+}
 
 
 # ifdef ASPECT_MELT_ADVECTING_BULK_CONCENTRATIONS
@@ -661,174 +661,80 @@ namespace aspect
       //               << std::endl;
       // }
       const unsigned int num_compositional_fields = this->introspection().n_compositional_fields;
-      std::vector<double> old_porosity(in.n_evaluation_points());
-      std::vector<std::vector<double>> old_fields(in.n_evaluation_points(),
-                                                  std::vector<double>(num_compositional_fields));
+      const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
+      std::vector<double> old_porosity(in.n_evaluation_points(), 0.0);
+      std::vector<std::vector<double>> old_fields = in.composition; 
+      // initialize old_fields with current_linearization_point as a fallback, 
+      // in case we don't get the old state input or the size doesn't match
+      // however we should not use current_linearization_point as old fields
+      // because linearal guessing and picard iteration
+      // will update the current_linearization_point and make it different from the old solution
+
+      const OldFieldStateInputs<dim> *old_state_input =
+        in.template get_additional_input<OldFieldStateInputs<dim>>();
+      if (old_state_input != nullptr
+          && old_state_input->old_porosity.size() == in.n_evaluation_points()
+          && old_state_input->old_fields.size() == in.n_evaluation_points())
+        {
+          old_porosity = old_state_input->old_porosity;
+          old_fields = old_state_input->old_fields;
+        }
+      else
+        {
+          for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
+            // we should not use current_linearization_point as old fields
+            old_porosity[i] = in.composition[i][porosity_idx];
+        }
+
+      const CompositionFieldGradientsInputs<dim> *composition_gradient_input =
+        in.template get_additional_input<CompositionFieldGradientsInputs<dim>>();
 
       ReactionRateOutputs<dim> *reaction_rate_out = out.template get_additional_output<ReactionRateOutputs<dim>>();
       PrescribedFieldOutputs<dim> *prescribed_field_out = out.template get_additional_output<PrescribedFieldOutputs<dim>>();
       MeltOutputs<dim> *melt_out = out.template get_additional_output<MeltOutputs<dim>>();
       ComponentPhaseExchangeOutputs<dim> *phase_exchange_out = out.template get_additional_output<ComponentPhaseExchangeOutputs<dim>>();
 
-      // we want to get the porosity field from the old solution here,
-      // because we need a field that is not updated in the nonlinear iterations
-      if (this->include_melt_transport() && in.current_cell.state() == IteratorState::valid
-          && this->get_timestep_number() >= 0 && !this->get_parameters().use_operator_splitting)
-        {
-          // Prepare the field function
-
-          Functions::FEFieldFunction<dim, LinearAlgebra::BlockVector>
-
-          fe_value(this->get_dof_handler(), this->get_old_solution(), this->get_mapping());
-          
-          // Actually we don't need old porosity for we now calculate melt fraction from bulk concentrations
-          // but we keep it here in case we need it in the future
-          const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
-
-          fe_value.set_active_cell(in.current_cell);
-          // // NOTE: if the extraction sentence for porosity is put outside the loop,
-          // // the porosity values will be failed to be extracted and keep as zero.
-          // // The reason is still unknown.
-          // fe_value.value_list(in.position,
-          //                     old_porosity,
-          //                     this->introspection().component_indices.compositional_fields[porosity_idx]);
-          // for(unsigned int c=0; c<this->introspection().n_compositional_fields; ++c)
-          //   {
-          //     std::vector<double> temp_field(in.n_evaluation_points());
-          //     // if (c == porosity_idx) continue;
-          //     fe_value.value_list(in.position,
-          //                         temp_field,
-          //                         this->introspection().component_indices.compositional_fields[c]);
-          //     for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
-          //       {
-          //         if (c == porosity_idx)
-          //           old_porosity[i] = temp_field[i];
-          //         old_fields[i][c] = temp_field[i];
-          //       }
-          //   }
-
-          // temporary fix: use current_linearization_point as old_field
-          old_fields = in.composition;
-          for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
-          {
-            const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
-            old_porosity[i] = in.composition[i][porosity_idx];
-          }
-          
-        }
-      else if (this->get_parameters().use_operator_splitting)
-        for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
-          {
-            const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
-            old_porosity[i] = in.composition[i][porosity_idx];
-          }
-
-      // // Get all chemical field indices and group them
-      // // TODO: we'd better check if the matching is successful during setup
-      // // or there will be segmentation fault while accessing invalid indices here
-      // // we need to match compositional fields for components
-      // std::vector<unsigned int> compositional_field_indices = {};
-      // if (enable_equilibrium_calculation)
-      //   {                  
-      //     for (unsigned int component_idx = 0; component_idx < n_components; ++component_idx)
+      // const Quadrature<dim> &quadrature_formula_compositional_fields = this->introspection().quadratures.compositional_fields;
+      // const unsigned int n_q_points_compositional_fields = quadrature_formula_compositional_fields.size();
+      // FEValues<dim> fe_values_for_grad_C (this->get_mapping(),
+      //                                     this->get_fe(),
+      //                                     quadrature_formula_compositional_fields,
+      //                                     update_values | update_gradients | update_quadrature_points);
+      // // The following "grad_C_values" is actually the gradients of all compositional fields
+      // // the index of this vector is the index for compositional fields.
+      // std::vector<std::vector<Tensor<1,dim>>> grad_C_values; 
+      // // to avoid quadrature point mismatch, we define cell average gradients
+      // std::vector<Tensor<1,dim>> grad_C(num_compositional_fields);
+      // // we need to judge if the cell is valid
+      // if (this->include_melt_transport() && in.current_cell.state() == IteratorState::valid)
+      //   {     
+      //     fe_values_for_grad_C.reinit (in.current_cell);
+      //     for (unsigned int c=0; c<num_compositional_fields; ++c)
       //       {
-      //         compositional_field_indices.push_back(component_index_to_composition_index[component_idx]);
+      //         grad_C_values.push_back(std::vector<Tensor<1,dim>>(n_q_points_compositional_fields));
+      //         fe_values_for_grad_C[this->introspection().extractors.compositional_fields[c]].get_function_gradients (
+      //           this->get_current_linearization_point(), grad_C_values[c]);
       //       }
-      //         // check if the length of solid_indices and liquid_indices equals to n_components
-      //         AssertThrow(compositional_field_indices.size() == n_components,
-      //                     ExcMessage("The number of compositional fields for components do not match the expected number of components."));
+      //     // to avoid quadrature point mismatch, we calculate and use cell average gradients
+      //     for (unsigned int c=0; c<num_compositional_fields; ++c)
+      //       {
+      //         for (unsigned int q=0; q<n_q_points_compositional_fields; ++q)
+      //           grad_C[c] += grad_C_values[c][q];
+      //         grad_C[c] /= n_q_points_compositional_fields;
+      //       }
       //   }
 
-      // Here we prepare FeValues object to compute gradients of serval fields if needed
-      // We only compute gradients when we really need them to save computational cost
-      // the commented out code is for the old method calculating gradients by chain rule
-      /*
-      const Quadrature<dim> &quadrature_formula_pressure = this->introspection().quadratures.pressure;
-      const Quadrature<dim> &quadrature_formula_temperature = this->introspection().quadratures.temperature;
-      const Quadrature<dim> &quadrature_formula_compositional_fields = this->introspection().quadratures.compositional_fields;
-      const unsigned int n_q_points_pressure = quadrature_formula_pressure.size();
-      const unsigned int n_q_points_temperature = quadrature_formula_temperature.size();
-      const unsigned int n_q_points_compositional_fields = quadrature_formula_compositional_fields.size();
-      FEValues<dim> fe_values_for_grad_P (this->get_mapping(),
-                                          this->get_fe(),
-                                          quadrature_formula_pressure,
-                                          update_values | update_gradients | update_quadrature_points);
-      FEValues<dim> fe_values_for_grad_T (this->get_mapping(),
-                                          this->get_fe(),
-                                          quadrature_formula_temperature,
-                                          update_values | update_gradients | update_quadrature_points);
-      FEValues<dim> fe_values_for_grad_C (this->get_mapping(),
-                                          this->get_fe(),
-                                          quadrature_formula_compositional_fields,
-                                          update_values | update_gradients | update_quadrature_points);
-      std::vector<Tensor<1,dim>> grad_P_values(n_q_points_pressure);
-      std::vector<Tensor<1,dim>> grad_T_values(n_q_points_temperature);
       std::vector<std::vector<Tensor<1,dim>>> grad_C_values;
-      // to avoid quadrature point mismatch, we define cell average gradients
-      Tensor<1,dim> grad_P;
-      Tensor<1,dim> grad_T;
-      std::vector<Tensor<1,dim>> grad_C(num_compositional_fields);
-      
-      // we need to judge if the cell is valid
-      if (this->include_melt_transport() && in.current_cell.state() == IteratorState::valid)
-        {     
-          fe_values_for_grad_P.reinit (in.current_cell);
-          fe_values_for_grad_T.reinit (in.current_cell);
-          fe_values_for_grad_C.reinit (in.current_cell);
-          fe_values_for_grad_P[this->introspection().extractors.pressure].get_function_gradients (
-            this->get_current_linearization_point(), grad_P_values);
-          fe_values_for_grad_T[this->introspection().extractors.temperature].get_function_gradients (
-            this->get_current_linearization_point(), grad_T_values);
+      grad_C_values.assign(in.n_evaluation_points(), std::vector<Tensor<1,dim>>(num_compositional_fields));
+       if (composition_gradient_input != nullptr
+          && composition_gradient_input->composition_gradients.size() == in.n_evaluation_points())
+        {
           for (unsigned int c=0; c<num_compositional_fields; ++c)
             {
-              grad_C_values.push_back(std::vector<Tensor<1,dim>>(n_q_points_compositional_fields));
-              fe_values_for_grad_C[this->introspection().extractors.compositional_fields[c]].get_function_gradients (
-                this->get_current_linearization_point(), grad_C_values[c]);
-            }
-          // to avoid quadrature point mismatch, we calculate and use cell average gradients
-          for (unsigned int q=0; q<n_q_points_pressure; ++q)
-            grad_P += grad_P_values[q];
-          grad_P /= n_q_points_pressure;
-          for (unsigned int q=0; q<n_q_points_temperature; ++q)
-            grad_T += grad_T_values[q];
-          grad_T /= n_q_points_temperature;
-          for (unsigned int c=0; c<num_compositional_fields; ++c)
-            {
-              for (unsigned int q=0; q<n_q_points_compositional_fields; ++q)
-                grad_C[c] += grad_C_values[c][q];
-              grad_C[c] /= n_q_points_compositional_fields;
-            }          
-        }
-      */
-      // Now we prepare FeValues object to compute gradients of c_s_i_eq and c_l_i_eq directly from
-      // prescribed compositional fields if needed
-      const Quadrature<dim> &quadrature_formula_compositional_fields = this->introspection().quadratures.compositional_fields;
-      const unsigned int n_q_points_compositional_fields = quadrature_formula_compositional_fields.size();
-      FEValues<dim> fe_values_for_grad_C (this->get_mapping(),
-                                          this->get_fe(),
-                                          quadrature_formula_compositional_fields,
-                                          update_values | update_gradients | update_quadrature_points);
-      // The following "grad_C_values" is actually the gradients of all compositional fields
-      // the index of this vector is the index for compositional fields.
-      std::vector<std::vector<Tensor<1,dim>>> grad_C_values; 
-      // to avoid quadrature point mismatch, we define cell average gradients
-      std::vector<Tensor<1,dim>> grad_C(num_compositional_fields);
-      // we need to judge if the cell is valid
-      if (this->include_melt_transport() && in.current_cell.state() == IteratorState::valid)
-        {     
-          fe_values_for_grad_C.reinit (in.current_cell);
-          for (unsigned int c=0; c<num_compositional_fields; ++c)
-            {
-              grad_C_values.push_back(std::vector<Tensor<1,dim>>(n_q_points_compositional_fields));
-              fe_values_for_grad_C[this->introspection().extractors.compositional_fields[c]].get_function_gradients (
-                this->get_current_linearization_point(), grad_C_values[c]);
-            }
-          // to avoid quadrature point mismatch, we calculate and use cell average gradients
-          for (unsigned int c=0; c<num_compositional_fields; ++c)
-            {
-              for (unsigned int q=0; q<n_q_points_compositional_fields; ++q)
-                grad_C[c] += grad_C_values[c][q];
-              grad_C[c] /= n_q_points_compositional_fields;
+              for (unsigned int q=0; q<in.n_evaluation_points(); ++q)
+                {
+                  grad_C_values[q][c] = composition_gradient_input->composition_gradients[q][c];
+                }
             }
         }
 
@@ -867,6 +773,7 @@ namespace aspect
             {
               phase_exchange_out->effective_latent_heat[i] = 0.0;
               phase_exchange_out->partial_phi_partial_T[i] = 0.0;
+              phase_exchange_out->melting_rate[i] = 0.0;
             }
 
           if (this->include_melt_transport())
@@ -891,14 +798,30 @@ namespace aspect
                                                    in.requests_property(MaterialProperties::reaction_rates) ||
                                                    in.requests_property(MaterialProperties::viscosity)))
                 {
-                  Assert(this->get_timestep_number()<=1 || std::isfinite(in.strain_rate[i].norm()),
-                         ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
-                                    "not filled by the caller."));
-                  const double trace_strain_rate =
-                    (this->get_timestep_number() > 1) ?
-                    (trace(in.strain_rate[i]))
-                    :
-                    numbers::signaling_nan<double>();
+                  // Keep both divergence retrieval pathways for future A/B tests:
+                  // 1) original trace(in.strain_rate), 2) additional input velocity_divergence.
+                  double trace_strain_rate = numbers::signaling_nan<double>();
+                  double velocity_divergence = numbers::signaling_nan<double>();
+                  if (this->get_timestep_number() > 0)
+                    {
+                      Assert(std::isfinite(in.strain_rate[i].norm()),
+                             ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
+                                        "not filled by the caller."));
+                      trace_strain_rate = trace(in.strain_rate[i]);
+
+                      const bool has_velocity_divergence =
+                        (composition_gradient_input != nullptr
+                         && composition_gradient_input->velocity_divergence.size() == in.n_evaluation_points()
+                         && std::isfinite(composition_gradient_input->velocity_divergence[i]));
+
+                      if (has_velocity_divergence)
+                        // bad news: interpolate method don't fill the additional input for the velocity divergence
+                        velocity_divergence = composition_gradient_input->velocity_divergence[i];
+                      else
+                        velocity_divergence = trace_strain_rate;
+                    }
+                  // (void) trace_strain_rate;
+                  // (void) velocity_divergence;
 
                   // we temporarily don't distinguish between melt fraction (mass) and porosity (volume)
                   const double old_melt_fraction = old_porosity[i];
@@ -907,7 +830,7 @@ namespace aspect
                     {
                       for (unsigned int _i = 0; _i < n_components; ++_i)
                         {
-                          bulk_concentrations[_i] = old_fields[i][component_indices_list[_i].bulk_index];
+                          bulk_concentrations[_i] = in.composition[i][component_indices_list[_i].bulk_index];
                           // if (local_debug)
                           //   {
                           //     this->get_pcout() << "[MM eval] bulk concentration of component "
@@ -1047,13 +970,13 @@ namespace aspect
                             if (c == component_indices_list[component_idx].bulk_index)
                               {
                                 if (component_indices_list[component_idx].solid_index != numbers::invalid_unsigned_int)
-                                  grad_c_s_i_eq = grad_C[component_indices_list[component_idx].solid_index];
+                                  grad_c_s_i_eq = grad_C_values[i][component_indices_list[component_idx].solid_index];
                                 if (component_indices_list[component_idx].liquid_index != numbers::invalid_unsigned_int)
-                                  grad_c_l_i_eq = grad_C[component_indices_list[component_idx].liquid_index];
+                                  grad_c_l_i_eq = grad_C_values[i][component_indices_list[component_idx].liquid_index];
                                 break;
                               }
                           }
-                        temporary_grad_c_l_an_eq = grad_C[component_indices_list[1].liquid_index]; // anorthite component index is 1
+                        temporary_grad_c_l_an_eq = grad_C_values[i][component_indices_list[1].liquid_index]; // anorthite component index is 1
 
                         // we don't fill reaction_terms of bulk concentration fields
                         out.reaction_terms[i][c] = 0.0;
@@ -1155,11 +1078,43 @@ namespace aspect
                       partial_phi_partial_T_local = perturbational_porosity_change / temperature_perturbation;
                     }
                   
+                  // here we calculate the melting rate
+                  double melting_rate = 0.0;
+                  // for debug out, copy "partial_phi_partial_time" to a prescribed field output
+                  double temp_partial_phi_partial_time = 0.0;
+                  if (enable_equilibrium_calculation && this->get_timestep_number() > 0)
+                    {
+                      // order-1 euler backward method for now.
+                      const double partial_phi_partial_time = (eq_melt_fraction - old_melt_fraction) / this->get_timestep();
+                      const double phi_advection = in.velocity[i] * grad_C_values[i][porosity_idx];
+                      const double phi_compaction = - (1 - eq_melt_fraction) * velocity_divergence; // this is a placeholder, we can also use trace_strain_rate here
+                      melting_rate = partial_phi_partial_time + phi_advection + phi_compaction;
+                      temp_partial_phi_partial_time = partial_phi_partial_time;
+                      // this->get_pcout() 
+                      // << "[MM eval]"
+                      // << "  partial_phi_partial_time: " 
+                      // << partial_phi_partial_time 
+                      // // << "  phi_advection: " 
+                      // // << phi_advection 
+                      // // << "  phi_compaction: " 
+                      // // << phi_compaction 
+                      // // // << "  velocity_divergence: "
+                      // // // << velocity_divergence
+                      // // // << "  trace_strain_rate: "
+                      // // // << trace_strain_rate
+                      // // << "  melting_rate: "
+                      // // << melting_rate
+                      // << "  temp_partial_phi_partial_time: "
+                      // << temp_partial_phi_partial_time
+                      // << std::endl;
+                    }
+                  
                   // fill phase exchange outputs if the model includes melt transport and the outputs are requested
                   if (phase_exchange_out != nullptr && enable_equilibrium_calculation)
                     {
                       phase_exchange_out->effective_latent_heat[i] = latent_heat_eff;
                       phase_exchange_out->partial_phi_partial_T[i] = partial_phi_partial_T_local;
+                      phase_exchange_out->melting_rate[i] = melting_rate;
                     }
 
                   if (prescribed_field_out != nullptr)
@@ -1170,10 +1125,10 @@ namespace aspect
                         {
                           std::vector<unsigned int> debug_field_indices;
                           debug_field_indices.push_back(this->introspection().compositional_index_for_name("debug_L_eff"));
-                          debug_field_indices.push_back(this->introspection().compositional_index_for_name("debug_dphi_dT"));
+                          debug_field_indices.push_back(this->introspection().compositional_index_for_name("debug_partial_phi_partial_time"));
                           // prescribed_field_out->prescribed_field_outputs[i][porosity_idx] = eq_melt_fraction; // placeholder
                           prescribed_field_out->prescribed_field_outputs[i][debug_field_indices[0]] = latent_heat_eff;
-                          prescribed_field_out->prescribed_field_outputs[i][debug_field_indices[1]] = partial_phi_partial_T_local; 
+                          prescribed_field_out->prescribed_field_outputs[i][debug_field_indices[1]] = temp_partial_phi_partial_time; 
                         }
                       // fill phase concentration fields
                       for (unsigned int component_idx = 0; component_idx < n_components; ++component_idx)
@@ -1184,6 +1139,13 @@ namespace aspect
                             prescribed_field_out->prescribed_field_outputs[i][solid_field_index] = c_solid_eq_values[component_idx];
                           if (liquid_field_index != numbers::invalid_unsigned_int)
                             prescribed_field_out->prescribed_field_outputs[i][liquid_field_index] = c_liquid_eq_values[component_idx];
+                        }
+                      // fill named melting_rate field
+                      if (fill_prescribed_melting_rate_field)
+                        {
+                          unsigned int melting_rate_field_index = this->introspection().compositional_index_for_name("melting_rate");
+                          if (melting_rate_field_index != numbers::invalid_unsigned_int)
+                            prescribed_field_out->prescribed_field_outputs[i][melting_rate_field_index] = melting_rate;
                         }
                     }
                   
@@ -1352,6 +1314,12 @@ namespace aspect
                              "Whether to fill debug fields for melt model. "
                              "If true, some debug fields will be filled in the prescribed_field_outputs. "
                              "These fields can be used for debugging purposes.");
+          prm.declare_entry ("Fill prescribed melting rate field", "true",
+                             Patterns::Bool (),
+                             "Whether to fill the prescribed melting_rate field in the prescribed_field_outputs. "
+                             "If true, the melting_rate field will be filled in the prescribed_field_outputs. "
+                             "This field can be used for debugging purposes or for coupling with other models. "
+                             "If false, the melting_rate field will not be filled and will be set to zero.");
 
           prm.declare_entry ("Equilibrium solving method", "bisection",
                              Patterns::Selection ("bisection|newton"),
@@ -1505,6 +1473,7 @@ namespace aspect
           enable_equilibrium_calculation    = prm.get_bool ("Enable equilibrium calculation");
           // enable_chemical_reaction_rate     = prm.get_bool ("Enable chemical reaction rate");
           fill_debug_fields                 = prm.get_bool ("Fill debug fields");
+          fill_prescribed_melting_rate_field = prm.get_bool ("Fill prescribed melting rate field");
 
           equilibrium_solving_method = prm.get ("Equilibrium solving method");
 
@@ -1642,6 +1611,36 @@ namespace aspect
       }
       prm.leave_subsection();
     }
+
+    template <int dim>
+    void
+    MeltThermodynamicEquilibrium<dim>::
+    fill_additional_material_model_inputs(MaterialModel::MaterialModelInputs<dim> &input,
+                                          const LinearAlgebra::BlockVector        &solution,
+                                          const FEValuesBase<dim>                 &fe_values,
+                                          const Introspection<dim>                &introspection) const
+    {
+      if (input.template get_additional_input<OldFieldStateInputs<dim>>() == nullptr)
+        input.additional_inputs.push_back(
+          std::make_unique<OldFieldStateInputs<dim>>(input.n_evaluation_points(),
+                                                     introspection.n_compositional_fields));
+
+      if (input.template get_additional_input<CompositionFieldGradientsInputs<dim>>() == nullptr)
+        input.additional_inputs.push_back(
+          std::make_unique<CompositionFieldGradientsInputs<dim>>(introspection.n_compositional_fields));
+
+      for (unsigned int i=0; i<input.additional_inputs.size(); ++i)
+        {
+          OldFieldStateInputs<dim> *old_state_input =
+            dynamic_cast<OldFieldStateInputs<dim> *>(input.additional_inputs[i].get());
+
+          if (old_state_input != nullptr)
+            old_state_input->fill(this->get_old_solution(), fe_values, introspection);
+          else
+            input.additional_inputs[i]->fill(solution, fe_values, introspection);
+        }
+    }
+
 
     template <int dim>
     void
@@ -2227,63 +2226,27 @@ namespace aspect
       //               << std::endl;
       // }
       const unsigned int num_compositional_fields = this->introspection().n_compositional_fields;
-      std::vector<double> old_porosity(in.n_evaluation_points());
-      std::vector<std::vector<double>> old_fields(in.n_evaluation_points(),
-                                                  std::vector<double>(num_compositional_fields));
+      const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
+      std::vector<double> old_porosity(in.n_evaluation_points(), 0.0);
+      std::vector<std::vector<double>> old_fields = in.composition;
+
+      const OldFieldStateInputs<dim> *old_state_input =
+        in.template get_additional_input<OldFieldStateInputs<dim>>();
+      if (old_state_input != nullptr
+          && old_state_input->old_porosity.size() == in.n_evaluation_points()
+          && old_state_input->old_fields.size() == in.n_evaluation_points())
+        {
+          old_porosity = old_state_input->old_porosity;
+          old_fields = old_state_input->old_fields;
+        }
+      else
+        {
+          for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
+            old_porosity[i] = in.composition[i][porosity_idx];
+        }
 
       ReactionRateOutputs<dim> *reaction_rate_out = out.template get_additional_output<ReactionRateOutputs<dim>>();
       PrescribedFieldOutputs<dim> *prescribed_field_out = out.template get_additional_output<PrescribedFieldOutputs<dim>>();
-
-      // we want to get the porosity field from the old solution here,
-      // because we need a field that is not updated in the nonlinear iterations
-      if (this->include_melt_transport() && in.current_cell.state() == IteratorState::valid
-          && this->get_timestep_number() >= 0 && !this->get_parameters().use_operator_splitting)
-        {
-          // Prepare the field function
-
-          Functions::FEFieldFunction<dim, LinearAlgebra::BlockVector>
-
-          fe_value(this->get_dof_handler(), this->get_old_solution(), this->get_mapping());
-
-          const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
-
-          fe_value.set_active_cell(in.current_cell);
-          // // NOTE: if the extraction sentence for porosity is put outside the loop,
-          // // the porosity values will be failed to be extracted and keep as zero.
-          // // The reason is still unknown.
-          // fe_value.value_list(in.position,
-          //                     old_porosity,
-          //                     this->introspection().component_indices.compositional_fields[porosity_idx]);
-          for(unsigned int c=0; c<this->introspection().n_compositional_fields; ++c)
-            {
-              std::vector<double> temp_field(in.n_evaluation_points());
-              // if (c == porosity_idx) continue;
-              fe_value.value_list(in.position,
-                                  temp_field,
-                                  this->introspection().component_indices.compositional_fields[c]);
-              for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
-                {
-                  if (c == porosity_idx)
-                    old_porosity[i] = temp_field[i];
-                  old_fields[i][c] = temp_field[i];
-                }
-            }
-
-          // // temporary fix: use current_linearization_point as old_field
-          // old_fields = in.composition;
-          // for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
-          // {
-          //   const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
-          //   old_porosity[i] = in.composition[i][porosity_idx];
-          // }
-          
-        }
-      else if (this->get_parameters().use_operator_splitting)
-        for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
-          {
-            const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
-            old_porosity[i] = in.composition[i][porosity_idx];
-          }
 
       for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
         {
@@ -2980,6 +2943,32 @@ namespace aspect
       }
       prm.leave_subsection();
     }
+
+    template <int dim>
+    void
+    MeltThermodynamicEquilibrium<dim>::
+    fill_additional_material_model_inputs(MaterialModel::MaterialModelInputs<dim> &input,
+                                          const LinearAlgebra::BlockVector        &solution,
+                                          const FEValuesBase<dim>                 &fe_values,
+                                          const Introspection<dim>                &introspection) const
+    {
+      if (input.template get_additional_input<OldFieldStateInputs<dim>>() == nullptr)
+        input.additional_inputs.push_back(
+          std::make_unique<OldFieldStateInputs<dim>>(input.n_evaluation_points(),
+                                                     introspection.n_compositional_fields));
+
+      for (unsigned int i=0; i<input.additional_inputs.size(); ++i)
+        {
+          OldFieldStateInputs<dim> *old_state_input =
+            dynamic_cast<OldFieldStateInputs<dim> *>(input.additional_inputs[i].get());
+
+          if (old_state_input != nullptr)
+            old_state_input->fill(this->get_old_solution(), fe_values, introspection);
+          else
+            input.additional_inputs[i]->fill(solution, fe_values, introspection);
+        }
+    }
+
 
     template <int dim>
     void

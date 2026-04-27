@@ -1921,6 +1921,10 @@ namespace aspect
           fe_values.reinit (cell);
           cell->get_dof_indices (local_dof_indices);
           in.reinit(fe_values, cell, introspection, solution);
+          // 20260427: We need to fill the additional material model inputs
+          // for the interpolation of the advection field,
+          // because some of the prescribed field outputs might depend on these additional inputs.
+          material_model->fill_additional_material_model_inputs(in, solution, fe_values, introspection);
 
           material_model->evaluate(in, out);
 

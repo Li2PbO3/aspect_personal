@@ -41,6 +41,106 @@ namespace aspect
     using namespace dealii;
 
     /**
+     * Additional material model inputs carrying compositional fields sampled
+     * from old_solution on the current cell.
+     */
+    template <int dim>
+    class OldFieldStateInputs : public AdditionalMaterialInputs<dim>
+    {
+      public:
+        OldFieldStateInputs (const unsigned int n_points,
+                             const unsigned int n_comp)
+          :
+          old_porosity(n_points, numbers::signaling_nan<double>()),
+          old_old_porosity(n_points, numbers::signaling_nan<double>()), // idle
+          old_fields(n_points, std::vector<double>(n_comp, numbers::signaling_nan<double>())),
+          old_old_fields(n_points, std::vector<double>(n_comp, numbers::signaling_nan<double>())) // idle
+        {}
+
+        std::vector<double> old_porosity;
+        std::vector<double> old_old_porosity;
+        std::vector<std::vector<double>> old_fields;
+        std::vector<std::vector<double>> old_old_fields;
+
+        void
+        fill (const LinearAlgebra::BlockVector &solution,
+              const FEValuesBase<dim>          &fe_values,
+              const Introspection<dim>         &introspection) override
+        {
+          const unsigned int n_q_points = fe_values.n_quadrature_points;
+          const unsigned int n_comp = introspection.n_compositional_fields;
+
+          old_porosity.resize(n_q_points);
+          old_fields.assign(n_q_points, std::vector<double>(n_comp));
+          old_old_porosity.resize(n_q_points); // idle
+          old_old_fields.assign(n_q_points, std::vector<double>(n_comp)); // idle
+
+          const unsigned int porosity_idx = introspection.compositional_index_for_name("porosity");
+
+          for (unsigned int c = 0; c < n_comp; ++c)
+            {
+              std::vector<double> temp_field(n_q_points);
+              fe_values[introspection.extractors.compositional_fields[c]]
+              .get_function_values(solution, temp_field);
+
+              for (unsigned int q = 0; q < n_q_points; ++q)
+                {
+                  old_fields[q][c] = temp_field[q];
+                  if (c == porosity_idx)
+                    old_porosity[q] = temp_field[q];
+                }
+            }
+        }
+    };
+
+    /**
+     * Additional material model inputs carrying pointwise compositional
+     * gradients and velocity divergence sampled from the provided solution
+     * vector.
+     */
+    template <int dim>
+    class CompositionFieldGradientsInputs : public AdditionalMaterialInputs<dim>
+    {
+      public:
+        CompositionFieldGradientsInputs (const unsigned int n_comp)
+          :
+          composition_gradients(1, std::vector<Tensor<1,dim>>(n_comp)),
+          velocity_divergence(1, numbers::signaling_nan<double>())
+        {}
+
+        std::vector<std::vector<Tensor<1,dim>>> composition_gradients;
+        std::vector<double> velocity_divergence;
+
+        void
+        fill (const LinearAlgebra::BlockVector &solution,
+              const FEValuesBase<dim>          &fe_values,
+              const Introspection<dim>         &introspection) override
+        {
+          const unsigned int n_q_points = fe_values.n_quadrature_points;
+          const unsigned int n_comp = introspection.n_compositional_fields;
+          composition_gradients.assign(n_q_points, std::vector<Tensor<1,dim>>(n_comp));
+          velocity_divergence.assign(n_q_points, numbers::signaling_nan<double>());
+
+          if (((fe_values.get_update_flags() & update_gradients) == update_default)
+              || n_q_points == 0)
+            return;
+
+          fe_values[introspection.extractors.velocities]
+          .get_function_divergences(solution, velocity_divergence);
+
+          for (unsigned int c = 0; c < n_comp; ++c)
+            {
+              std::vector<Tensor<1,dim>> grad_values(n_q_points);
+              fe_values[introspection.extractors.compositional_fields[c]]
+              .get_function_gradients(solution, grad_values);
+
+              for (unsigned int q = 0; q < n_q_points; ++q)
+                composition_gradients[q][c] = grad_values[q];
+            }
+        }
+    };
+
+    /**
      * A material model that implements a simple formulation of the
      * material parameters required for the modeling of melt transport
      * in a global model, including a source term for the porosity according
@@ -112,6 +212,15 @@ namespace aspect
          */
         void
         parse_parameters (ParameterHandler &prm) override;
+        
+        // this material model needs to fill old solution fields.
+        // so we need to override this function to fill the additional material model inputs
+        void
+        fill_additional_material_model_inputs(MaterialModel::MaterialModelInputs<dim> &input,
+                      const LinearAlgebra::BlockVector        &solution,
+                      const FEValuesBase<dim>                 &fe_values,
+                      const Introspection<dim>                &introspection) const override;
+
         /**
          * @}
          */
@@ -158,6 +267,7 @@ namespace aspect
         bool enable_chemical_reaction_rate;
 
         bool fill_debug_fields;
+        bool fill_prescribed_melting_rate_field;
         
         // select a method to solve the equilibrium 
         std::string equilibrium_solving_method;
@@ -326,7 +436,8 @@ namespace aspect
         ComponentPhaseExchangeOutputs (const unsigned int n_points)
           :
           effective_latent_heat(n_points, numbers::signaling_nan<double>()),
-          partial_phi_partial_T(n_points, numbers::signaling_nan<double>())
+          partial_phi_partial_T(n_points, numbers::signaling_nan<double>()),
+          melting_rate(n_points, numbers::signaling_nan<double>())
         {}
 
         /**
@@ -339,6 +450,13 @@ namespace aspect
          * We also need partial phi partial T.
          */
         std::vector<double> partial_phi_partial_T; // [n_points]
+        /**
+         * if we choose to apply the phase exchange heating in a source term form,
+         * we will use this melting_rate value.
+         */
+        // here the melting_rate is the changing rate of melt fraction or porosity.
+        // this means the melting_rate is within the unit of 1/s or 1/yr
+        std::vector<double> melting_rate; // [n_points]
     };
 
   } // namespace MaterialModel
@@ -357,6 +475,73 @@ namespace aspect
   namespace MaterialModel
   {
     using namespace dealii;
+
+    /**
+     * Additional material model inputs carrying compositional fields sampled
+     * from old_solution on the current cell.
+     */
+    template <int dim>
+    class OldFieldStateInputs : public AdditionalMaterialInputs<dim>
+    {
+      public:
+        OldFieldStateInputs (const unsigned int n_points,
+                             const unsigned int n_comp)
+          :
+          old_porosity(n_points, numbers::signaling_nan<double>()),
+          old_fields(n_points, std::vector<double>(n_comp, numbers::signaling_nan<double>()))
+        {}
+
+        std::vector<double> old_porosity;
+        std::vector<std::vector<double>> old_fields;
+
+        void
+        fill (const LinearAlgebra::BlockVector &solution,
+              const FEValuesBase<dim>          &fe_values,
+              const Introspection<dim>         &introspection) override
+        {
+          const unsigned int n_q_points = fe_values.n_quadrature_points;
+          const unsigned int n_comp = introspection.n_compositional_fields;
+
+          old_porosity.resize(n_q_points);
+          old_fields.assign(n_q_points, std::vector<double>(n_comp));
+
+          const unsigned int porosity_idx = introspection.compositional_index_for_name("porosity");
+
+          for (unsigned int c = 0; c < n_comp; ++c)
+            {
+              std::vector<double> temp_field(n_q_points);
+              fe_values[introspection.extractors.compositional_fields[c]]
+              .get_function_values(solution, temp_field);
+
+              for (unsigned int q = 0; q < n_q_points; ++q)
+                {
+                  old_fields[q][c] = temp_field[q];
+                  if (c == porosity_idx)
+                    old_porosity[q] = temp_field[q];
+                }
+            }
+        }
+    };
+
+    /**
+     * Placeholder additional input type kept for compatibility in the
+     * original implementation branch. This branch does not use composition
+     * gradients from additional inputs.
+     */
+    template <int dim>
+    class CompositionFieldGradientsInputs : public AdditionalMaterialInputs<dim>
+    {
+      public:
+        CompositionFieldGradientsInputs (const unsigned int,
+                                         const unsigned int)
+        {}
+
+        void
+        fill (const LinearAlgebra::BlockVector &,
+              const FEValuesBase<dim>          &,
+              const Introspection<dim>         &) override
+        {}
+    };
 
     /**
      * A material model that implements a simple formulation of the
@@ -426,6 +611,13 @@ namespace aspect
          */
         void
         parse_parameters (ParameterHandler &prm) override;
+
+        void
+        fill_additional_material_model_inputs(MaterialModel::MaterialModelInputs<dim> &input,
+                      const LinearAlgebra::BlockVector        &solution,
+                      const FEValuesBase<dim>                 &fe_values,
+                      const Introspection<dim>                &introspection) const override;
+
         /**
          * @}
          */

@@ -69,6 +69,27 @@ namespace aspect
          */
         void
         create_additional_material_model_outputs(MaterialModel::MaterialModelOutputs<dim> &outputs) const override;
+
+        /**
+         * Declare run-time parameters.
+         */
+        static
+        void
+        declare_parameters (ParameterHandler &prm);
+
+        /**
+         * Parse run-time parameters.
+         */
+        void
+        parse_parameters (ParameterHandler &prm) override;
+
+      private:
+        /**
+         * Select how latent heat is represented in the temperature equation.
+         * true  -> heat-source form (RHS)
+         * false -> apparent-heat-capacity form (LHS)
+         */
+        bool use_heat_source_formulation = true;
     };
 #endif
   }
