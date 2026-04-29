@@ -77,11 +77,18 @@ namespace aspect
         this->introspection().compositional_name_exists("melting_rate")
         ? this->introspection().compositional_index_for_name("melting_rate")
         : numbers::invalid_unsigned_int;
+      const unsigned int porosity_field_index =
+        this->introspection().compositional_name_exists("porosity")
+        ? this->introspection().compositional_index_for_name("porosity")
+        : numbers::invalid_unsigned_int;
 
       if (use_heat_source_formulation)
         {
           AssertThrow(melting_rate_field_index != numbers::invalid_unsigned_int,
                       ExcMessage("Compositional field 'melting_rate' must exist when using heat-source "
+                                 "formulation in component phase exchange heating."));
+          AssertThrow(porosity_field_index != numbers::invalid_unsigned_int,
+                      ExcMessage("Compositional field 'porosity' must exist when using heat-source "
                                  "formulation in component phase exchange heating."));
           AssertThrow(material_model_inputs.composition.size() == material_model_inputs.position.size(),
                       ExcMessage("The size of composition inputs must match the number of evaluation points."));
@@ -96,10 +103,23 @@ namespace aspect
           const double effective_latent_heat = phase_exchange_out->effective_latent_heat[q];
           const double partial_phi_partial_T = phase_exchange_out->partial_phi_partial_T[q];
 
+          std::ostringstream err_msg_L_eff;
+          err_msg_L_eff << "effective_latent_heat contains a non-finite value: "
+                        << effective_latent_heat
+                        << " at position " << material_model_inputs.position[q]
+                        << " where the temperature is " << material_model_inputs.temperature[q]
+                        << " and compositional fields are ";
+          for (unsigned int c = 0; c < material_model_inputs.composition[q].size(); ++c)
+            err_msg_L_eff << material_model_inputs.composition[q][c] << " ";
+          
           AssertThrow(std::isfinite(effective_latent_heat),
-                      ExcMessage("effective_latent_heat contains a non-finite value."));
+                      ExcMessage(err_msg_L_eff.str()));
+          std::ostringstream err_msg_dphi_dT;
+          err_msg_dphi_dT << "partial_phi_partial_T contains a non-finite value: "
+                          << partial_phi_partial_T
+                          << " at position " << material_model_inputs.position[q];
           AssertThrow(std::isfinite(partial_phi_partial_T),
-                      ExcMessage("partial_phi_partial_T contains a non-finite value."));
+                      ExcMessage(err_msg_dphi_dT.str()));
           if (use_heat_source_formulation)
             {
               // this->get_pcout() << "[HeatingModel] " 
@@ -111,12 +131,20 @@ namespace aspect
               // Read melting rate from current_linearization_point composition.
               const double melting_rate =
                 material_model_inputs.composition[q][melting_rate_field_index];
+              
+              std::ostringstream err_msg_melting_rate;
+              err_msg_melting_rate << "melting_rate contains a non-finite value: "
+                                   << melting_rate
+                                   << " at position " << material_model_inputs.position[q];
               AssertThrow(std::isfinite(melting_rate),
-                          ExcMessage("melting_rate contains a non-finite value."));
+                          ExcMessage(err_msg_melting_rate.str()));
+              const double porosity = material_model_inputs.composition[q][porosity_field_index];            
               const double solid_density = material_model_outputs.densities[q];
-              (void) solid_density;
               const MaterialModel::MeltOutputs<dim> *melt_out = material_model_outputs.template get_additional_output<MaterialModel::MeltOutputs<dim>>();
               const double liquid_density = melt_out->fluid_densities[q];
+
+              const double bulk_density = (1.0 - porosity) * solid_density + porosity * liquid_density;
+              (void) bulk_density; // currently not used, but we may need it in the future if we want to consider the effect of bulk density on latent heat calculation.
 
               /**
                * The latent heat term is applied as a source term on the right hand side of the temperature equation, 

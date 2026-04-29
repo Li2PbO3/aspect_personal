@@ -336,6 +336,22 @@ namespace aspect
                        Patterns::FileName(),
                        "Name of the world builder file. If empty, the world builder is not initialized.");
 
+    prm.declare_entry ("Use extrapolated current linearization point", "true",
+                       Patterns::Bool(),
+                       "If set to true, the current linearization point "
+                       "is extrapolated from the previous two time steps. "
+                       "This can be used to speed up convergence of the nonlinear solver, "
+                       "but may cause instabilities in some cases. "
+                       "If set to false, the current linearization point "
+                       "is simply taken as the solution at the previous time step.");
+    prm.declare_entry ("Use BDF2 for advection equations", "true",
+                       Patterns::Bool(),
+                       "If set to true, the second order backward differentiation formula (BDF2) is used to "
+                       "discretize the time derivative in the advection equations. This is a more accurate "
+                       "time discretization than the first order backward Euler method, but it also requires "
+                       "storing the solution at two previous time steps instead of one, and it may cause "
+                       "instabilities in some cases. If set to false, the first order backward Euler method is used.");
+
     prm.enter_subsection ("Solver parameters");
     {
       prm.declare_entry ("Temperature solver tolerance", "1e-12",
@@ -1379,6 +1395,9 @@ namespace aspect
     convert_to_years        = prm.get_bool ("Use years in output instead of seconds");
     timing_output_frequency = prm.get_integer ("Timing output frequency");
     world_builder_file      = prm.get("World builder file");
+
+    use_extrapolated_current_linearization_point = prm.get_bool("Use extrapolated current linearization point");
+    use_bdf2_for_advection_equations = prm.get_bool("Use BDF2 for advection equations");
 
     maximum_time_step       = prm.get_double("Maximum time step");
     if (convert_to_years == true)

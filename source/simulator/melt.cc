@@ -684,7 +684,12 @@ namespace aspect
       const Introspection<dim> &introspection = this->introspection();
       const FiniteElement<dim> &fe = this->get_fe();
 
-      const bool use_bdf2_scheme = (this->get_timestep_number() > 1);
+      // if (this->get_parameters().use_bdf2_for_advection_equations == false)
+      //   {
+      //     this->get_pcout() << "Assembling advection system with a first order time stepping scheme." << std::endl;
+      //   }
+
+      const bool use_bdf2_scheme = (this->get_timestep_number() > 1 && this->get_parameters().use_bdf2_for_advection_equations);
       const unsigned int n_q_points = scratch.finite_element_values.n_quadrature_points;
       const unsigned int advection_dofs_per_cell = data.local_dof_indices.size();
 

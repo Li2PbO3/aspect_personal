@@ -1830,7 +1830,8 @@ namespace aspect
 
     // If possible use an extrapolated solution from last and
     // previous to last timestep.
-    if (timestep_number > 1)
+    if (timestep_number > 1 &&
+        parameters.use_extrapolated_current_linearization_point)
       {
         // TODO: Trilinos sadd does not like ghost vectors even as input. Copy
         // into distributed vectors for now:
@@ -1842,6 +1843,11 @@ namespace aspect
                              -time_step/old_time_step,
                              distr_old_solution);
         current_linearization_point = distr_solution;
+      }
+    else
+      {
+        current_linearization_point = old_solution;
+        // pcout << "Extrapolation of current_linearization_point is disabled."<< std::endl;
       }
   }
 

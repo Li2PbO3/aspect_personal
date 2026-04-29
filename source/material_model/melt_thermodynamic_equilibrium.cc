@@ -631,7 +631,8 @@ namespace aspect
                 {
                   bulk_concentrations[_i] = in.composition[q][compositional_field_indices[_i]];
                 }
-              melt_fractions[q] = this->solve_eq_melt_fraction(in.temperature[q],
+              const double temperature_for_equilibrium_calculation = in.temperature[q] - ZERO_CELSIUS_IN_KELVIN;
+              melt_fractions[q] = this->solve_eq_melt_fraction(temperature_for_equilibrium_calculation,
                                                                std::max(0.0, in.pressure[q]),
                                                                bulk_concentrations);
             }
@@ -940,7 +941,7 @@ namespace aspect
                         // out.reaction_terms[i][c] = porosity_change * out.densities[i] / this->get_timestep();
                         out.reaction_terms[i][c] = 0.0;
 
-                      else if (this->get_timestep_number() > 0 && enable_equilibrium_calculation)
+                      else if (true /* this->get_timestep_number() > 0 */ && enable_equilibrium_calculation) 
                       {
                         // reaction term for bulk concentration fields
                         // if equilibrium calculation is disabled
@@ -1072,8 +1073,15 @@ namespace aspect
                           sum_perturbational_heat_effect += perturbational_heat_effects[component_idx];
                         }
                       perturbational_porosity_change = eq_melt_fraction_perturbed - eq_melt_fraction;
-                      latent_heat_eff = sum_perturbational_heat_effect / perturbational_porosity_change;
-                      
+                      if (std::abs(perturbational_porosity_change) < 1e-12)
+                        {
+                          latent_heat_eff = 0.0;
+                        }
+                      else
+                        {
+                          latent_heat_eff = sum_perturbational_heat_effect / perturbational_porosity_change;
+                          // latent_heat_eff = 450000.0; // temporary constant
+                        }  
                       // calculate partial_phi_partial_T
                       partial_phi_partial_T_local = perturbational_porosity_change / temperature_perturbation;
                     }
@@ -1094,16 +1102,16 @@ namespace aspect
                       // << "[MM eval]"
                       // << "  partial_phi_partial_time: " 
                       // << partial_phi_partial_time 
-                      // // << "  phi_advection: " 
-                      // // << phi_advection 
-                      // // << "  phi_compaction: " 
-                      // // << phi_compaction 
-                      // // // << "  velocity_divergence: "
-                      // // // << velocity_divergence
-                      // // // << "  trace_strain_rate: "
-                      // // // << trace_strain_rate
-                      // // << "  melting_rate: "
-                      // // << melting_rate
+                      // << "  phi_advection: " 
+                      // << phi_advection 
+                      // << "  phi_compaction: " 
+                      // << phi_compaction 
+                      // // << "  velocity_divergence: "
+                      // // << velocity_divergence
+                      // // << "  trace_strain_rate: "
+                      // // << trace_strain_rate
+                      // << "  melting_rate: "
+                      // << melting_rate
                       // << "  temp_partial_phi_partial_time: "
                       // << temp_partial_phi_partial_time
                       // << std::endl;

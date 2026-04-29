@@ -472,6 +472,13 @@ namespace aspect
     std::string                    world_builder_file;
 
     /**
+     * These 2 parameters control 2 time-stepping schemes that are available in ASPECT.
+     * We declare and parse them to be able to disable them if needed.
+     */
+    bool                           use_extrapolated_current_linearization_point;
+    bool                           use_bdf2_for_advection_equations;
+
+    /**
      * @}
      */
 

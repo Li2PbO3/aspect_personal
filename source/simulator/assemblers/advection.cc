@@ -68,7 +68,7 @@ namespace aspect
 
       const bool use_supg = (this->get_parameters().advection_stabilization_method
                              == Parameters<dim>::AdvectionStabilizationMethod::supg);
-      const bool   use_bdf2_scheme = (this->get_timestep_number() > 1);
+      const bool   use_bdf2_scheme = (this->get_timestep_number() > 1 && this->get_parameters().use_bdf2_for_advection_equations);
       const double time_step = this->get_timestep();
       const double old_time_step = this->get_old_timestep();
       const double bdf2_factor = (use_bdf2_scheme)? ((2*time_step + old_time_step) /
@@ -498,7 +498,7 @@ namespace aspect
       AssertThrow(use_supg == false,
                   ExcMessage("The Darcy field advection method does not support the use of SUPG"));
 
-      const bool   use_bdf2_scheme = (this->get_timestep_number() > 1);
+      const bool   use_bdf2_scheme = (this->get_timestep_number() > 1 && this->get_parameters().use_bdf2_for_advection_equations);
       const double time_step = this->get_timestep();
       const double old_time_step = this->get_old_timestep();
 
