@@ -202,13 +202,13 @@ namespace aspect
       {
         prm.enter_subsection("Component phase exchange heating");
         {
-          prm.declare_entry ("Use heat source formulation", "true",
+          prm.declare_entry ("Use heat source formulation", "false",
                              Patterns::Bool(),
                              "Select how latent heat is represented in the temperature equation. "
                              "If true, latent heat is intended to be added as a source term on the RHS. "
                              "If false, latent heat is intended to be added to the apparent heat capacity "
                              "on the LHS. "
-                             "Default is true (heat-source form).");
+                             "Default is false (latent heat form).");
         }
         prm.leave_subsection();
       }

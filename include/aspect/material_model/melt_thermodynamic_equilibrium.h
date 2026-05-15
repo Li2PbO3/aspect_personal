@@ -141,6 +141,37 @@ namespace aspect
     };
 
     /**
+     * Additional material model inputs carrying fluid pressure sampled
+     * from the provided solution vector.
+     */
+    template <int dim>
+    class FluidPressureInputs : public AdditionalMaterialInputs<dim>
+    {
+      public:
+        FluidPressureInputs (const unsigned int n_points)
+          :
+          fluid_pressure(n_points, numbers::signaling_nan<double>())
+        {}
+
+        std::vector<double> fluid_pressure;
+
+        void
+        fill (const LinearAlgebra::BlockVector &solution,
+              const FEValuesBase<dim>          &fe_values,
+              const Introspection<dim>         &introspection) override
+        {
+          const unsigned int n_q_points = fe_values.n_quadrature_points;
+          fluid_pressure.resize(n_q_points, numbers::signaling_nan<double>());
+
+          if (!introspection.variable_exists("fluid pressure"))
+            return;
+
+          const FEValuesExtractors::Scalar ex_p_f = introspection.variable("fluid pressure").extractor_scalar();
+          fe_values[ex_p_f].get_function_values(solution, fluid_pressure);
+        }
+    };
+
+    /**
      * A material model that implements a simple formulation of the
      * material parameters required for the modeling of melt transport
      * in a global model, including a source term for the porosity according
@@ -250,6 +281,8 @@ namespace aspect
         // changing with p, T, and phi
         double thermal_viscosity_exponent;
         double thermal_bulk_viscosity_exponent;
+        double viscosity_activation_energy;
+        double viscosity_activation_volume;
         double thermal_expansivity;
         double alpha_phi;
         double compressibility;
@@ -369,6 +402,10 @@ namespace aspect
                                        const double f, // melt fraction
                                        const double eq_const // equilibrium constant
                                        ) const;
+
+        double
+        pressure_temperature_viscosity_factor (const double temperature,
+                       const double pressure) const;
 
         // i decide to define my own solvers to find roots
         // of equations, because i have no idea how to use the root finding method in deal.ii
@@ -544,6 +581,37 @@ namespace aspect
     };
 
     /**
+     * Additional material model inputs carrying fluid pressure sampled
+     * from the provided solution vector.
+     */
+    template <int dim>
+    class FluidPressureInputs : public AdditionalMaterialInputs<dim>
+    {
+      public:
+        FluidPressureInputs (const unsigned int n_points)
+          :
+          fluid_pressure(n_points, numbers::signaling_nan<double>())
+        {}
+
+        std::vector<double> fluid_pressure;
+
+        void
+        fill (const LinearAlgebra::BlockVector &solution,
+              const FEValuesBase<dim>          &fe_values,
+              const Introspection<dim>         &introspection) override
+        {
+          const unsigned int n_q_points = fe_values.n_quadrature_points;
+          fluid_pressure.resize(n_q_points, numbers::signaling_nan<double>());
+
+          if (!introspection.variable_exists("fluid pressure"))
+            return;
+
+          const FEValuesExtractors::Scalar ex_p_f = introspection.variable("fluid pressure").extractor_scalar();
+          fe_values[ex_p_f].get_function_values(solution, fluid_pressure);
+        }
+    };
+
+    /**
      * A material model that implements a simple formulation of the
      * material parameters required for the modeling of melt transport
      * in a global model, including a source term for the porosity according
@@ -652,6 +720,8 @@ namespace aspect
         // changing with p, T, and phi
         double thermal_viscosity_exponent;
         double thermal_bulk_viscosity_exponent;
+        double viscosity_activation_energy;
+        double viscosity_activation_volume;
         double thermal_expansivity;
         double alpha_phi;
         double compressibility;
@@ -764,6 +834,10 @@ namespace aspect
                                        const double f, // melt fraction
                                        const double eq_const // equilibrium constant
                                        ) const;
+
+        double
+        pressure_temperature_viscosity_factor (const double temperature,
+                       const double pressure) const;
 
         // i decide to define my own solvers to find roots
         // of equations, because i have no idea how to use the root finding method in deal.ii

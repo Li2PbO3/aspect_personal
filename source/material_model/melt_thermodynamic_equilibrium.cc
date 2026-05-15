@@ -36,6 +36,13 @@ namespace
   const bool local_debug = true;
 }
 
+// TODO: this->introspection().compositional_index_for_name(component_name)
+// would meet exceptions if the compositional field with the given name is not found. 
+// For now we catch the exception and set the index to invalid_unsigned_int 
+// to avoid the program from crashing.
+// However there is a method compositional_name_exists() under struct Introspection.
+// We'd better use this method to check the existence of the compositional field
+// before calling compositional_index_for_name() to avoid the exception.
 
 # ifdef ASPECT_MELT_ADVECTING_BULK_CONCENTRATIONS
 // New implementation, advecting bulk concentration fields.
@@ -64,6 +71,31 @@ namespace aspect
     is_compressible () const
     {
       return false;
+    }
+
+    template <int dim>
+    double
+    MeltThermodynamicEquilibrium<dim>::
+    pressure_temperature_viscosity_factor (const double temperature,
+                                           const double pressure) const
+    {
+      const double universal_gas_constant = 8.31446261815324;
+      const double clamped_temperature = std::max(temperature, 1.0);
+      const double clamped_reference_temperature = std::max(reference_T, 1.0);
+      const double local_pressure = std::max(0.0, pressure);
+      const double reference_pressure = std::max(0.0, this->get_surface_pressure());
+
+      const double log_viscosity_reference =
+        (viscosity_activation_energy + viscosity_activation_volume * reference_pressure)
+        / (universal_gas_constant * clamped_reference_temperature);
+      const double log_viscosity_local =
+        (viscosity_activation_energy + viscosity_activation_volume * local_pressure)
+        / (universal_gas_constant * clamped_temperature);
+
+      const double bounded_log_factor =
+        std::max(std::min(log_viscosity_local - log_viscosity_reference, 50.0), -50.0);
+
+      return std::exp(bounded_log_factor);
     }
 
     // match component index to composition index
@@ -510,8 +542,9 @@ namespace aspect
       // we need to check if f_eq_equation is a monotonically increasing function
 
       // now we can check if the temperature is between the solidus and liquidus
-      const bool is_all_solid = (temperature < solidus);
-      const bool is_all_liquid = (temperature > liquidus);
+      const double temperature_epsilon = 0.0; // 1e-4; // 0.0001 degree Celsius
+      const bool is_all_solid = (temperature - solidus < temperature_epsilon);
+      const bool is_all_liquid = (temperature - liquidus > -temperature_epsilon);
       if (is_all_solid)
         {
           // this is a solid state
@@ -545,10 +578,29 @@ namespace aspect
         return dealii::numbers::signaling_nan<double>();
       }
       
+      // // we need to check if the root is between 0 and 1
+      // AssertThrow(inner_melt_fraction >= 0.0 && inner_melt_fraction <= 1.0,
+      //   ExcMessage("The root finder find the melt fraction. "
+      //              "at T = " + std::to_string(temperature) + " deg C, and P = " + std::to_string(pressure) + " Pa. "
+      //              "In this condition, the solidus is " + std::to_string(solidus) + " deg C, and the liquidus is " + std::to_string(liquidus) + " deg C. "
+      //               + "However The melt fraction is not between 0 and 1: " + std::to_string(inner_melt_fraction)));
+
       // we need to check if the root is between 0 and 1
-      AssertThrow(inner_melt_fraction >= 0.0 && inner_melt_fraction <= 1.0,
-        ExcMessage("The root finder find the melt fraction."
-                   "However The melt fraction is not between 0 and 1."));
+      // However we don't throw exceptions but just give warnings and set the melt fraction to 0 or 1
+      if (inner_melt_fraction < 0.0)
+        {
+          // this->get_pcout() << "[MM eval] Warning: the melt fraction is smaller than 0: " << inner_melt_fraction << " at T = " << temperature << " deg C, and P = " << pressure << " Pa. "
+          //                   << "In this condition, the solidus is " << solidus << " deg C, and the liquidus is " << liquidus << " deg C. "
+          //                   << "Setting the melt fraction to 0.\n";
+          inner_melt_fraction = 0.0;
+        }
+      if (inner_melt_fraction > 1.0)
+        {
+          // this->get_pcout() << "[MM eval] Warning: the melt fraction is greater than 1: " << inner_melt_fraction << " at T = " << temperature << " deg C, and P = " << pressure << " Pa. "
+          //                   << "In this condition, the solidus is " << solidus << " deg C, and the liquidus is " << liquidus << " deg C. "
+          //                   << "Setting the melt fraction to 1.\n";
+          inner_melt_fraction = 1.0;
+        }
 
       return inner_melt_fraction;
     }
@@ -612,10 +664,20 @@ namespace aspect
       // check if the length of compositional_field_indices equals to n_components
       AssertThrow(compositional_field_indices.size() == n_components,
                   ExcMessage("The number of compositional fields for components do not match the expected number of components."));
+
+      const FluidPressureInputs<dim> *fluid_pressure_input =
+        in.template get_additional_input<FluidPressureInputs<dim>>();
       
       
       for (unsigned int q=0; q<in.n_evaluation_points(); ++q)
         {
+          const double pressure_for_material
+            = (fluid_pressure_input != nullptr
+               && fluid_pressure_input->fluid_pressure.size() == in.n_evaluation_points()
+               && std::isfinite(fluid_pressure_input->fluid_pressure[q]))
+              ? fluid_pressure_input->fluid_pressure[q]
+              : in.pressure[q];
+
           // if (this->get_parameters().use_operator_splitting)
           //   {
           //     const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
@@ -633,7 +695,7 @@ namespace aspect
                 }
               const double temperature_for_equilibrium_calculation = in.temperature[q] - ZERO_CELSIUS_IN_KELVIN;
               melt_fractions[q] = this->solve_eq_melt_fraction(temperature_for_equilibrium_calculation,
-                                                               std::max(0.0, in.pressure[q]),
+                                                               std::max(0.0, pressure_for_material),
                                                                bulk_concentrations);
             }
           else
@@ -690,10 +752,15 @@ namespace aspect
       const CompositionFieldGradientsInputs<dim> *composition_gradient_input =
         in.template get_additional_input<CompositionFieldGradientsInputs<dim>>();
 
+      const FluidPressureInputs<dim> *fluid_pressure_input =
+        in.template get_additional_input<FluidPressureInputs<dim>>();
+
       ReactionRateOutputs<dim> *reaction_rate_out = out.template get_additional_output<ReactionRateOutputs<dim>>();
       PrescribedFieldOutputs<dim> *prescribed_field_out = out.template get_additional_output<PrescribedFieldOutputs<dim>>();
       MeltOutputs<dim> *melt_out = out.template get_additional_output<MeltOutputs<dim>>();
       ComponentPhaseExchangeOutputs<dim> *phase_exchange_out = out.template get_additional_output<ComponentPhaseExchangeOutputs<dim>>();
+      const bool use_pressure_temperature_viscosity =
+        (viscosity_activation_energy > 0.0 || viscosity_activation_volume > 0.0);
 
       // const Quadrature<dim> &quadrature_formula_compositional_fields = this->introspection().quadratures.compositional_fields;
       // const unsigned int n_q_points_compositional_fields = quadrature_formula_compositional_fields.size();
@@ -741,6 +808,13 @@ namespace aspect
 
       for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
         {
+          const double pressure_for_material
+            = (fluid_pressure_input != nullptr
+               && fluid_pressure_input->fluid_pressure.size() == in.n_evaluation_points()
+               && std::isfinite(fluid_pressure_input->fluid_pressure[i]))
+              ? fluid_pressure_input->fluid_pressure[i]
+              : in.pressure[i];
+
           // calculate density first, we need it for the reaction term
           // temperature dependence of density is 1 - alpha * (T - T(adiabatic))
           double temperature_dependence = 1.0;
@@ -750,8 +824,8 @@ namespace aspect
           else
             temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
 
-          double pressure_dependence = 1.0 + compressibility * (in.pressure[i] - this->get_surface_pressure());
-          // std::exp(melt_compressibility * (in.pressure[i] - this->get_surface_pressure()));
+          double pressure_dependence = 1.0 + compressibility * (pressure_for_material - this->get_surface_pressure());
+          // std::exp(melt_compressibility * (pressure_for_material - this->get_surface_pressure()));
 
           // // keep density constant for now
           // out.densities[i] = reference_rho_s;
@@ -782,8 +856,7 @@ namespace aspect
               const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
               const double porosity = std::min(1.0, std::max(in.composition[i][porosity_idx],0.0));
 
-              // calculate viscosity based on local melt
-              // TODO: we can implement compositional dependence of viscosity in the future by following the same approach
+              // Keep the original porosity-weakening relation for shear viscosity.
               out.viscosities[i] *= std::exp(- alpha_phi * porosity);
 
               // initialize prescribed field outputs if needed
@@ -844,7 +917,7 @@ namespace aspect
                   const double temperature_for_equilibrium_calculation = in.temperature[i] - ZERO_CELSIUS_IN_KELVIN;
                   const double eq_melt_fraction = (enable_equilibrium_calculation ? 
                                                    this->solve_eq_melt_fraction(temperature_for_equilibrium_calculation,
-                                                                                std::max(0.0, in.pressure[i]),
+                                                                                std::max(0.0, pressure_for_material),
                                                                                 bulk_concentrations) : 
                                                    old_melt_fraction);
                   double porosity_change = 0.0;
@@ -882,7 +955,7 @@ namespace aspect
                     {
                       for (unsigned int comp_idx = 0; comp_idx < n_components; ++comp_idx)
                         {
-                          melting_points[comp_idx] = temperature_melting(std::max(0.0, in.pressure[i]),
+                          melting_points[comp_idx] = temperature_melting(std::max(0.0, pressure_for_material),
                                                                     melting_point_0_values[comp_idx],
                                                                     melting_curve_coefficient_A_values[comp_idx],
                                                                     melting_curve_coefficient_B_values[comp_idx]);
@@ -1028,7 +1101,7 @@ namespace aspect
                     {
                       eq_melt_fraction_perturbed
                         = this->solve_eq_melt_fraction(perturbed_temperature_for_equilibrium_calculation,
-                                                       std::max(0.0, in.pressure[i]),
+                                                       std::max(0.0, pressure_for_material),
                                                        bulk_concentrations);
 
                       for (unsigned int comp_idx = 0; comp_idx < n_components; ++comp_idx)
@@ -1132,11 +1205,27 @@ namespace aspect
                       if (fill_debug_fields)
                         {
                           std::vector<unsigned int> debug_field_indices;
-                          debug_field_indices.push_back(this->introspection().compositional_index_for_name("debug_L_eff"));
-                          debug_field_indices.push_back(this->introspection().compositional_index_for_name("debug_partial_phi_partial_time"));
+                          debug_field_indices.push_back(this->introspection().compositional_index_for_name("debug_1"));
+                          debug_field_indices.push_back(this->introspection().compositional_index_for_name("debug_2"));
                           // prescribed_field_out->prescribed_field_outputs[i][porosity_idx] = eq_melt_fraction; // placeholder
-                          prescribed_field_out->prescribed_field_outputs[i][debug_field_indices[0]] = latent_heat_eff;
-                          prescribed_field_out->prescribed_field_outputs[i][debug_field_indices[1]] = temp_partial_phi_partial_time; 
+                          unsigned int checking_component_index = 1;
+                          double T_m_0 = melting_point_0_values[checking_component_index];
+                          double m_c_A = melting_curve_coefficient_A_values[checking_component_index];
+                          double m_c_B = melting_curve_coefficient_B_values[checking_component_index];
+                          const double temp_T_m_morb = temperature_melting(pressure_for_material, T_m_0, m_c_A, m_c_B);
+                          double L_teq = latent_heat_values[checking_component_index];
+                          double r_teq = tuning_parameter_values[checking_component_index];
+                          const double temp_K_morb = equilibrium_constant(temperature_for_equilibrium_calculation, L_teq, r_teq, temp_T_m_morb);
+                          prescribed_field_out->prescribed_field_outputs[i][debug_field_indices[0]] = temp_K_morb;
+                          checking_component_index = 2;
+                          T_m_0 = melting_point_0_values[checking_component_index];
+                          m_c_A = melting_curve_coefficient_A_values[checking_component_index];
+                          m_c_B = melting_curve_coefficient_B_values[checking_component_index];
+                          const double temp_T_m_cmorb = temperature_melting(pressure_for_material, T_m_0, m_c_A, m_c_B);
+                          L_teq = latent_heat_values[checking_component_index];
+                          r_teq = tuning_parameter_values[checking_component_index];
+                          const double temp_K_cmorb = equilibrium_constant(temperature_for_equilibrium_calculation, L_teq, r_teq, temp_T_m_cmorb);
+                          prescribed_field_out->prescribed_field_outputs[i][debug_field_indices[1]] = temp_K_cmorb; 
                         }
                       // fill phase concentration fields
                       for (unsigned int component_idx = 0; component_idx < n_components; ++component_idx)
@@ -1151,9 +1240,11 @@ namespace aspect
                       // fill named melting_rate field
                       if (fill_prescribed_melting_rate_field)
                         {
-                          unsigned int melting_rate_field_index = this->introspection().compositional_index_for_name("melting_rate");
-                          if (melting_rate_field_index != numbers::invalid_unsigned_int)
-                            prescribed_field_out->prescribed_field_outputs[i][melting_rate_field_index] = melting_rate;
+                          if (this->introspection().compositional_name_exists("melting_rate"))
+                            {
+                              unsigned int melting_rate_field_index = this->introspection().compositional_index_for_name("melting_rate");
+                              prescribed_field_out->prescribed_field_outputs[i][melting_rate_field_index] = melting_rate;
+                            }
                         }
                     }
                   
@@ -1168,18 +1259,23 @@ namespace aspect
           out.thermal_conductivities[i] = thermal_conductivity;
           out.compressibilities[i] = 0.0;
 
-          double visc_temperature_dependence = 1.0;
-          if (this->include_adiabatic_heating ())
-          {
-            const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
-            visc_temperature_dependence = std::max(std::min(std::exp(-thermal_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
-          }
-          else if (thermal_viscosity_exponent != 0.0)
-          {
-            const double delta_temp = in.temperature[i]-reference_T;
-            visc_temperature_dependence = std::max(std::min(std::exp(-thermal_viscosity_exponent*delta_temp/reference_T),1e4),1e-4);
-          }
-          out.viscosities[i] *= visc_temperature_dependence;
+          if (use_pressure_temperature_viscosity)
+            out.viscosities[i] *= pressure_temperature_viscosity_factor(in.temperature[i], pressure_for_material);
+          else
+            {
+              double visc_temperature_dependence = 1.0;
+              if (this->include_adiabatic_heating ())
+                {
+                  const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
+                  visc_temperature_dependence = std::max(std::min(std::exp(-thermal_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
+                }
+              else if (thermal_viscosity_exponent != 0.0)
+                {
+                  const double delta_temp = in.temperature[i]-reference_T;
+                  visc_temperature_dependence = std::max(std::min(std::exp(-thermal_viscosity_exponent*delta_temp/reference_T),1e4),1e-4);
+                }
+              out.viscosities[i] *= visc_temperature_dependence;
+            }
         } // end of loop over evaluation points
 
       // // fill melt outputs if they exist
@@ -1192,6 +1288,13 @@ namespace aspect
 
           for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
             {
+              const double pressure_for_material
+                = (fluid_pressure_input != nullptr
+                   && fluid_pressure_input->fluid_pressure.size() == in.n_evaluation_points()
+                   && std::isfinite(fluid_pressure_input->fluid_pressure[i]))
+                  ? fluid_pressure_input->fluid_pressure[i]
+                  : in.pressure[i];
+
               double porosity = std::max(in.composition[i][porosity_idx],0.0);
               melt_out->fluid_viscosities[i] = eta_f; // TODO: add compositional dependence
               // here we set the permeability to be proportional to phi^3 instead of phi^3*(1-phi)^2 temporarily.
@@ -1207,23 +1310,27 @@ namespace aspect
               else
                 temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
               melt_out->fluid_densities[i] = reference_rho_f * temperature_dependence
-                                             * std::exp(melt_compressibility * (in.pressure[i] - this->get_surface_pressure()));
+                                             * std::exp(melt_compressibility * (pressure_for_material - this->get_surface_pressure()));
 
               melt_out->compaction_viscosities[i] = xi_0 * std::exp(- alpha_phi * porosity);
-              // TODO: we can also include compositional dependence of compaction viscosity in the future by following the same approach as shear viscosity
 
-              double visc_temperature_dependence = 1.0;
-              if (this->include_adiabatic_heating ())
+              if (use_pressure_temperature_viscosity)
+                melt_out->compaction_viscosities[i] *= pressure_temperature_viscosity_factor(in.temperature[i], pressure_for_material);
+              else
                 {
-                  const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
-                  visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
+                  double visc_temperature_dependence = 1.0;
+                  if (this->include_adiabatic_heating ())
+                    {
+                      const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
+                      visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
+                    }
+                  else if (thermal_viscosity_exponent != 0.0)
+                    {
+                      const double delta_temp = in.temperature[i]-reference_T;
+                      visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/reference_T),1e4),1e-4);
+                    }
+                  melt_out->compaction_viscosities[i] *= visc_temperature_dependence;
                 }
-              else if (thermal_viscosity_exponent != 0.0)
-                {
-                  const double delta_temp = in.temperature[i]-reference_T;
-                  visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/reference_T),1e4),1e-4);
-                }
-              melt_out->compaction_viscosities[i] *= visc_temperature_dependence;
 
               // fill melt outputs for concentration fields if equilibrium calculation is enabled
               if (enable_equilibrium_calculation)
@@ -1290,6 +1397,18 @@ namespace aspect
                              "See the general documentation "
                              "of this model for a formula that states the dependence of the "
                              "viscosity on this factor, which is called $\\beta$ there.");
+          prm.declare_entry ("Viscosity activation energy", "0.0",
+                             Patterns::Double (0.),
+                             "Activation energy $E$ for the pressure-temperature dependent "
+                             "Arrhenius viscosity factor. If either this value or the activation "
+                             "volume is nonzero, the same factor is applied to both shear and "
+                             "compaction viscosities. Units: \\si{\\joule\\per\\mole}.");
+          prm.declare_entry ("Viscosity activation volume", "0.0",
+                             Patterns::Double (0.),
+                             "Activation volume $V$ for the pressure-temperature dependent "
+                             "Arrhenius viscosity factor. The reference state is defined by the "
+                             "surface pressure and reference temperature. Units: "
+                             "\\si{\\meter\\cubed\\per\\mole}.");
           prm.declare_entry ("Exponential melt weakening factor", "27.",
                               Patterns::Double (0.),
                               "The porosity dependence of the viscosity. Units: dimensionless.");
@@ -1406,8 +1525,9 @@ namespace aspect
                              Patterns::List(Patterns::Double(0)), // pattern
                              "As we follow Keller and Katz (2016), the melting point here is in Celsius. "
                              "List of melting points at surface for each component. "
+                             "Temperature in degree Celsius! "
                              "T_m = T_m0 + A * P + B * P^2. "
-                             "Units: \\si{\\kelvin}" // description
+                            //  "Units: \\si{\\kelvin}" // description
                             );
           prm.declare_entry ("Melting curve coefficient A for each component", // name
                              "", // default value
@@ -1469,6 +1589,8 @@ namespace aspect
 
           thermal_viscosity_exponent        = prm.get_double ("Thermal viscosity exponent");
           thermal_bulk_viscosity_exponent   = prm.get_double ("Thermal bulk viscosity exponent");
+          viscosity_activation_energy       = prm.get_double ("Viscosity activation energy");
+          viscosity_activation_volume       = prm.get_double ("Viscosity activation volume");
           thermal_expansivity               = prm.get_double ("Thermal expansion coefficient");
           alpha_phi                         = prm.get_double ("Exponential melt weakening factor");
           compressibility                   = prm.get_double ("Solid compressibility");
@@ -1548,6 +1670,12 @@ namespace aspect
 
           if (thermal_viscosity_exponent!=0.0 && reference_T == 0.0)
             AssertThrow(false, ExcMessage("Error: Material model Melt thermodynamic equilibrium with Thermal viscosity exponent can not have reference_T=0."));
+
+          if ((viscosity_activation_energy > 0.0 || viscosity_activation_volume > 0.0)
+              && reference_T <= 0.0)
+            AssertThrow(false,
+                        ExcMessage("Error: Material model Melt thermodynamic equilibrium with pressure-temperature "
+                                   "dependent viscosity requires a positive reference temperature."));
 
           if (this->convert_output_to_years() == true)
             melting_time_scale *= year_in_seconds;
@@ -1637,6 +1765,11 @@ namespace aspect
         input.additional_inputs.push_back(
           std::make_unique<CompositionFieldGradientsInputs<dim>>(introspection.n_compositional_fields));
 
+      if (this->include_melt_transport()
+          && input.template get_additional_input<FluidPressureInputs<dim>>() == nullptr)
+        input.additional_inputs.push_back(
+          std::make_unique<FluidPressureInputs<dim>>(input.n_evaluation_points()));
+
       for (unsigned int i=0; i<input.additional_inputs.size(); ++i)
         {
           OldFieldStateInputs<dim> *old_state_input =
@@ -1705,6 +1838,31 @@ namespace aspect
     is_compressible () const
     {
       return false;
+    }
+
+    template <int dim>
+    double
+    MeltThermodynamicEquilibrium<dim>::
+    pressure_temperature_viscosity_factor (const double temperature,
+                                           const double pressure) const
+    {
+      const double universal_gas_constant = 8.31446261815324;
+      const double clamped_temperature = std::max(temperature, 1.0);
+      const double clamped_reference_temperature = std::max(reference_T, 1.0);
+      const double local_pressure = std::max(0.0, pressure);
+      const double reference_pressure = std::max(0.0, this->get_surface_pressure());
+
+      const double log_viscosity_reference =
+        (viscosity_activation_energy + viscosity_activation_volume * reference_pressure)
+        / (universal_gas_constant * clamped_reference_temperature);
+      const double log_viscosity_local =
+        (viscosity_activation_energy + viscosity_activation_volume * local_pressure)
+        / (universal_gas_constant * clamped_temperature);
+
+      const double bounded_log_factor =
+        std::max(std::min(log_viscosity_local - log_viscosity_reference, 50.0), -50.0);
+
+      return std::exp(bounded_log_factor);
     }
 
     // match component index to composition indices
@@ -2173,9 +2331,19 @@ namespace aspect
                               old_porosity,
                               this->introspection().component_indices.compositional_fields[porosity_idx]);
         }
+
+      const FluidPressureInputs<dim> *fluid_pressure_input =
+        in.template get_additional_input<FluidPressureInputs<dim>>();
       
       for (unsigned int q=0; q<in.n_evaluation_points(); ++q)
         {
+          const double pressure_for_material
+            = (fluid_pressure_input != nullptr
+               && fluid_pressure_input->fluid_pressure.size() == in.n_evaluation_points()
+               && std::isfinite(fluid_pressure_input->fluid_pressure[q]))
+              ? fluid_pressure_input->fluid_pressure[q]
+              : in.pressure[q];
+
           if (this->get_parameters().use_operator_splitting)
             {
               const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
@@ -2205,7 +2373,7 @@ namespace aspect
                                             + old_melt_fraction * in.composition[q][liquid_indices[_i]];
                 }
               melt_fractions[q] = this->solve_eq_melt_fraction(in.temperature[q],
-                                                               std::max(0.0, in.pressure[q]),
+                                                               std::max(0.0, pressure_for_material),
                                                                bulk_concentrations);
             }
           else
@@ -2255,9 +2423,20 @@ namespace aspect
 
       ReactionRateOutputs<dim> *reaction_rate_out = out.template get_additional_output<ReactionRateOutputs<dim>>();
       PrescribedFieldOutputs<dim> *prescribed_field_out = out.template get_additional_output<PrescribedFieldOutputs<dim>>();
+      const FluidPressureInputs<dim> *fluid_pressure_input =
+        in.template get_additional_input<FluidPressureInputs<dim>>();
+      const bool use_pressure_temperature_viscosity =
+        (viscosity_activation_energy > 0.0 || viscosity_activation_volume > 0.0);
 
       for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
         {
+          const double pressure_for_material
+            = (fluid_pressure_input != nullptr
+               && fluid_pressure_input->fluid_pressure.size() == in.n_evaluation_points()
+               && std::isfinite(fluid_pressure_input->fluid_pressure[i]))
+              ? fluid_pressure_input->fluid_pressure[i]
+              : in.pressure[i];
+
           // calculate density first, we need it for the reaction term
           // temperature dependence of density is 1 - alpha * (T - T(adiabatic))
           double temperature_dependence = 1.0;
@@ -2285,7 +2464,7 @@ namespace aspect
               const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
               const double porosity = std::min(1.0, std::max(in.composition[i][porosity_idx],0.0));
 
-              // calculate viscosity based on local melt
+              // Keep the original porosity-weakening relation for shear viscosity.
               out.viscosities[i] *= std::exp(- alpha_phi * porosity);
 
               if (include_melting_and_freezing && (in.requests_property(MaterialProperties::reaction_terms) ||
@@ -2356,7 +2535,7 @@ namespace aspect
                   const double temperature_for_equilibrium_calculation = in.temperature[i] - ZERO_CELSIUS_IN_KELVIN;
                   const double eq_melt_fraction = (enable_equilibrium_calculation ? 
                                                    this->solve_eq_melt_fraction(temperature_for_equilibrium_calculation,
-                                                                                std::max(0.0, in.pressure[i]),
+                                                                                std::max(0.0, pressure_for_material),
                                                                                 bulk_concentrations) : 
                                                    old_melt_fraction);
                   double porosity_change = 0.0;
@@ -2394,7 +2573,7 @@ namespace aspect
                     {
                       for (unsigned int comp_idx = 0; comp_idx < n_components; ++comp_idx)
                         {
-                          melting_points[comp_idx] = temperature_melting(std::max(0.0, in.pressure[i]),
+                          melting_points[comp_idx] = temperature_melting(std::max(0.0, pressure_for_material),
                                                                     melting_point_0_values[comp_idx],
                                                                     melting_curve_coefficient_A_values[comp_idx],
                                                                     melting_curve_coefficient_B_values[comp_idx]);
@@ -2512,18 +2691,23 @@ namespace aspect
           out.thermal_conductivities[i] = thermal_conductivity;
           out.compressibilities[i] = 0.0;
 
-          double visc_temperature_dependence = 1.0;
-          if (this->include_adiabatic_heating ())
-          {
-            const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
-            visc_temperature_dependence = std::max(std::min(std::exp(-thermal_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
-          }
-          else if (thermal_viscosity_exponent != 0.0)
-          {
-            const double delta_temp = in.temperature[i]-reference_T;
-            visc_temperature_dependence = std::max(std::min(std::exp(-thermal_viscosity_exponent*delta_temp/reference_T),1e4),1e-4);
-          }
-          out.viscosities[i] *= visc_temperature_dependence;
+          if (use_pressure_temperature_viscosity)
+            out.viscosities[i] *= pressure_temperature_viscosity_factor(in.temperature[i], pressure_for_material);
+          else
+            {
+              double visc_temperature_dependence = 1.0;
+              if (this->include_adiabatic_heating ())
+                {
+                  const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
+                  visc_temperature_dependence = std::max(std::min(std::exp(-thermal_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
+                }
+              else if (thermal_viscosity_exponent != 0.0)
+                {
+                  const double delta_temp = in.temperature[i]-reference_T;
+                  visc_temperature_dependence = std::max(std::min(std::exp(-thermal_viscosity_exponent*delta_temp/reference_T),1e4),1e-4);
+                }
+              out.viscosities[i] *= visc_temperature_dependence;
+            }
         }    
 
       // fill melt outputs if they exist
@@ -2535,6 +2719,13 @@ namespace aspect
 
           for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
             {
+              const double pressure_for_material
+                = (fluid_pressure_input != nullptr
+                   && fluid_pressure_input->fluid_pressure.size() == in.n_evaluation_points()
+                   && std::isfinite(fluid_pressure_input->fluid_pressure[i]))
+                  ? fluid_pressure_input->fluid_pressure[i]
+                  : in.pressure[i];
+
               double porosity = std::max(in.composition[i][porosity_idx],0.0);
 
               // // seems unnecessary to fill melt_out for porosity here
@@ -2555,22 +2746,27 @@ namespace aspect
               else
                 temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
               melt_out->fluid_densities[i] = reference_rho_f * temperature_dependence
-                                             * std::exp(melt_compressibility * (in.pressure[i] - this->get_surface_pressure()));
+                                             * std::exp(melt_compressibility * (pressure_for_material - this->get_surface_pressure()));
 
               melt_out->compaction_viscosities[i] = xi_0 * std::exp(- alpha_phi * porosity);
 
-              double visc_temperature_dependence = 1.0;
-              if (this->include_adiabatic_heating ())
+              if (use_pressure_temperature_viscosity)
+                melt_out->compaction_viscosities[i] *= pressure_temperature_viscosity_factor(in.temperature[i], pressure_for_material);
+              else
                 {
-                  const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
-                  visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
+                  double visc_temperature_dependence = 1.0;
+                  if (this->include_adiabatic_heating ())
+                    {
+                      const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
+                      visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
+                    }
+                  else if (thermal_viscosity_exponent != 0.0)
+                    {
+                      const double delta_temp = in.temperature[i]-reference_T;
+                      visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/reference_T),1e4),1e-4);
+                    }
+                  melt_out->compaction_viscosities[i] *= visc_temperature_dependence;
                 }
-              else if (thermal_viscosity_exponent != 0.0)
-                {
-                  const double delta_temp = in.temperature[i]-reference_T;
-                  visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/reference_T),1e4),1e-4);
-                }
-              melt_out->compaction_viscosities[i] *= visc_temperature_dependence;
             }
         }
     }
@@ -2630,6 +2826,18 @@ namespace aspect
                              "See the general documentation "
                              "of this model for a formula that states the dependence of the "
                              "viscosity on this factor, which is called $\\beta$ there.");
+          prm.declare_entry ("Viscosity activation energy", "0.0",
+                             Patterns::Double (0.),
+                             "Activation energy $E$ for the pressure-temperature dependent "
+                             "Arrhenius viscosity factor. If either this value or the activation "
+                             "volume is nonzero, the same factor is applied to both shear and "
+                             "compaction viscosities. Units: \\si{\\joule\\per\\mole}.");
+          prm.declare_entry ("Viscosity activation volume", "0.0",
+                             Patterns::Double (0.),
+                             "Activation volume $V$ for the pressure-temperature dependent "
+                             "Arrhenius viscosity factor. The reference state is defined by the "
+                             "surface pressure and reference temperature. Units: "
+                             "\\si{\\meter\\cubed\\per\\mole}.");
           prm.declare_entry ("Exponential melt weakening factor", "27.",
                               Patterns::Double (0.),
                               "The porosity dependence of the viscosity. Units: dimensionless.");
@@ -2802,6 +3010,8 @@ namespace aspect
 
           thermal_viscosity_exponent        = prm.get_double ("Thermal viscosity exponent");
           thermal_bulk_viscosity_exponent   = prm.get_double ("Thermal bulk viscosity exponent");
+          viscosity_activation_energy       = prm.get_double ("Viscosity activation energy");
+          viscosity_activation_volume       = prm.get_double ("Viscosity activation volume");
           thermal_expansivity               = prm.get_double ("Thermal expansion coefficient");
           alpha_phi                         = prm.get_double ("Exponential melt weakening factor");
           compressibility                   = prm.get_double ("Solid compressibility");
@@ -2880,6 +3090,12 @@ namespace aspect
 
           if (thermal_viscosity_exponent!=0.0 && reference_T == 0.0)
             AssertThrow(false, ExcMessage("Error: Material model Melt thermodynamic equilibrium with Thermal viscosity exponent can not have reference_T=0."));
+
+          if ((viscosity_activation_energy > 0.0 || viscosity_activation_volume > 0.0)
+              && reference_T <= 0.0)
+            AssertThrow(false,
+                        ExcMessage("Error: Material model Melt thermodynamic equilibrium with pressure-temperature "
+                                   "dependent viscosity requires a positive reference temperature."));
 
           if (this->convert_output_to_years() == true)
             melting_time_scale *= year_in_seconds;
@@ -2964,6 +3180,11 @@ namespace aspect
         input.additional_inputs.push_back(
           std::make_unique<OldFieldStateInputs<dim>>(input.n_evaluation_points(),
                                                      introspection.n_compositional_fields));
+
+      if (this->include_melt_transport()
+          && input.template get_additional_input<FluidPressureInputs<dim>>() == nullptr)
+        input.additional_inputs.push_back(
+          std::make_unique<FluidPressureInputs<dim>>(input.n_evaluation_points()));
 
       for (unsigned int i=0; i<input.additional_inputs.size(); ++i)
         {
