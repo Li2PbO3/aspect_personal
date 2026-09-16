@@ -70,3 +70,6 @@ cmake-build-debug/
 build.ninja
 rules.ninja
 .ninja_*
+
+# local verification scaffolding (A/B runs, baseline binary, per-step diffs)
+/.teq_bench/

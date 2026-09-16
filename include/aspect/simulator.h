@@ -1432,6 +1432,21 @@ namespace aspect
        */
       void interpolate_material_output_into_advection_field (const AdvectionField &adv_field);
 
+      /**
+       * Interpolate the material model outputs into several prescribed advection
+       * fields at once. All fields in @p adv_fields are filled from a single pass
+       * over the mesh with a single material model evaluation per grid point,
+       * because one evaluation of the material model already fills the
+       * PrescribedFieldOutputs for all compositional fields. The fields are
+       * grouped by the polynomial degree of their base element (which determines
+       * the support points used for the interpolation) and one mesh loop is
+       * performed per group.
+       *
+       * This function is implemented in
+       * <code>source/simulator/helper_functions.cc</code>.
+       */
+      void interpolate_material_outputs_into_advection_fields (const std::vector<AdvectionField> &adv_fields);
+
 
       /**
        * Interpolate the given function onto the velocity FE space and write

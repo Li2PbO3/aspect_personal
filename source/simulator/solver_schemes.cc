@@ -371,33 +371,36 @@ namespace aspect
   template <int dim>
   void Simulator<dim>::fill_prescribed_fields()
   {
+    // [P2-3] Collect all compositional fields that are filled from material model
+    // outputs and fill them in a single pass over the mesh. Previously every field
+    // triggered its own full grid loop and its own material model evaluation, i.e.
+    // 8 evaluations per grid point for a deck with 8 prescribed fields, even though
+    // a single evaluation already fills the prescribed outputs of all fields.
+    std::vector<AdvectionField> prescribed_composition_fields;
     for (unsigned int c=0; c < introspection.n_compositional_fields; ++c)
       {
         const AdvectionField adv_field (AdvectionField::composition(c));
-        const typename Parameters<dim>::AdvectionFieldMethod::Kind method = adv_field.advection_method(introspection);
-        switch (method)
-          {
-            case Parameters<dim>::AdvectionFieldMethod::prescribed_field:
-            {
-              TimerOutput::Scope timer (computing_timer, "Interpolate prescribed composition");
-
-              interpolate_material_output_into_advection_field(adv_field);
-
-              // Call the signal in case the user wants to do something with the variable:
-              SolverControl dummy;
-              signals.post_advection_solver(*this,
-                                            adv_field.is_temperature(),
-                                            adv_field.compositional_variable,
-                                            dummy);
-              break;
-            }
-
-            default:
-              // do nothing for other fields
-              break;
-          }        
+        if (adv_field.advection_method(introspection) == Parameters<dim>::AdvectionFieldMethod::prescribed_field)
+          prescribed_composition_fields.push_back(adv_field);
       }
-    
+
+    if (!prescribed_composition_fields.empty())
+      {
+        TimerOutput::Scope timer (computing_timer, "Interpolate prescribed composition");
+
+        interpolate_material_outputs_into_advection_fields(prescribed_composition_fields);
+
+        // Call the signal in case the user wants to do something with the variables:
+        for (const auto &adv_field : prescribed_composition_fields)
+          {
+            SolverControl dummy;
+            signals.post_advection_solver(*this,
+                                          adv_field.is_temperature(),
+                                          adv_field.compositional_variable,
+                                          dummy);
+          }
+      }
+
     for (unsigned int c=0; c < introspection.n_compositional_fields; ++c)
       {
         const AdvectionField adv_field (AdvectionField::composition(c));
@@ -816,6 +819,13 @@ namespace aspect
     fill_prescribed_fields();
     assemble_and_solve_stokes();
 
+    // [P0-2] Refresh the prescribed fields once more, now that the Stokes solve
+    // has updated the fluid pressure. Without this, the stored porosity would be
+    // evaluated with the *previous* timestep's p_f while the stored p_f belongs
+    // to the current step. Postprocessing assumes porosity = phi_eq(p_f, T, c),
+    // so the two must belong to the same state.
+    fill_prescribed_fields();
+
     if (parameters.run_postprocessors_on_nonlinear_iterations)
       postprocess ();
 
@@ -1215,6 +1225,10 @@ namespace aspect
         ++nonlinear_iteration;
       }
     while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
+
+    // [P0-2] One extra prescribed-field refresh after the final Stokes solve, so
+    // that the stored porosity is consistent with the stored fluid pressure.
+    fill_prescribed_fields();
 
     signals.post_nonlinear_solver(nonlinear_solver_control);
   }
