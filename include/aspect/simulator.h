@@ -779,8 +779,19 @@ namespace aspect
        * Fill prescribed fields with a method.
        * This function is implemented in
        * <code>source/simulator/solver_schemes.cc</code>.
+       *
+       * If @p include_pure_convection_predictors is true, the diagnostic
+       * "pure convection" predictor fields (compositional fields whose name
+       * ends in `_pure_convection`) are additionally interpolated from the
+       * material model outputs. The material model fills those outputs with the
+       * *equilibrium* values, so this call resets the predictors to equilibrium
+       * at the end of a timestep. The next advection solve then transports them
+       * with no source term, making it a single-step prediction of what would
+       * happen without melting. This is only called once per timestep (after
+       * the Stokes solve), never during the earlier prescribed-field refresh,
+       * so the diagnostics never see an already-reset state.
        */
-      void fill_prescribed_fields ();
+      void fill_prescribed_fields (const bool include_pure_convection_predictors = false);
 
       /**
        * Assemble and solve the Stokes equation.

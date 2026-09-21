@@ -1153,6 +1153,92 @@ namespace aspect
                               prescribed_field_out->prescribed_field_outputs[i][melting_rate_field_index] = melting_rate;
                             }
                         }
+
+                      // ---- diagnostic pure-convection single-step predictors ----
+                      // We report
+                      //   Gamma/rho = (equilibrium - pure-convection prediction) / dt,
+                      // where the pure-convection predictors were advanced by ASPECT's
+                      // own advection solver with zero source term. Both the
+                      // equilibrium state and the (float64) prediction are available
+                      // here, so no error-prone subtraction of stored float32 fields is
+                      // needed in postprocessing. The result is reported in 1/yr and is
+                      // density-free, consistent with the extended Boussinesq
+                      // approximation used by this model.
+                      if (enable_pure_convection_diagnostics)
+                        {
+                          double sum_component_rates = 0.0;
+
+                          if (this->get_timestep_number() > 0
+                              && this->get_timestep() > 0.0
+                              && enable_equilibrium_calculation)
+                            {
+                              // per-component rates, from the pure-convection solid-mass predictors
+                              for (unsigned int component_idx = 0; component_idx < n_components; ++component_idx)
+                                {
+                                  const unsigned int solid_pc_index
+                                    = pure_convection_solid_mass_indices[component_idx];
+                                  if (solid_pc_index == numbers::invalid_unsigned_int)
+                                    continue;
+
+                                  const double solid_mass_eq
+                                    = (1.0 - eq_melt_fraction) * c_solid_eq_values[component_idx];
+                                  const double solid_mass_adv = in.composition[i][solid_pc_index];
+                                  // solid mass balance: d_t s + div(s V) = -Gamma/rho
+                                  const double rate_component
+                                    = -(solid_mass_eq - solid_mass_adv) / this->get_timestep();
+                                  sum_component_rates += rate_component;
+
+                                  if (pure_convection_component_rate_indices[component_idx]
+                                      != numbers::invalid_unsigned_int)
+                                    prescribed_field_out->prescribed_field_outputs[i]
+                                    [pure_convection_component_rate_indices[component_idx]]
+                                      = rate_component * year_in_seconds;
+                                }
+
+                              // Independent cross-check from the porosity predictor. It is
+                              // deliberately NOT used as the total: it is transported by
+                              // ASPECT's porosity operator and stabilized with the melt
+                              // residual, while the component rates above are transported
+                              // as passive solid-flux tracers. Reporting the sum as the
+                              // total keeps the four reported diagnostics exactly
+                              // consistent with each other.
+                              if (pure_convection_porosity_rate_index != numbers::invalid_unsigned_int)
+                                {
+                                  const double phi_adv
+                                    = in.composition[i][pure_convection_porosity_index];
+                                  prescribed_field_out->prescribed_field_outputs[i]
+                                  [pure_convection_porosity_rate_index]
+                                    = (eq_melt_fraction - phi_adv) / this->get_timestep() * year_in_seconds;
+                                }
+                            }
+
+                          if (pure_convection_total_rate_index != numbers::invalid_unsigned_int)
+                            prescribed_field_out->prescribed_field_outputs[i]
+                            [pure_convection_total_rate_index] = sum_component_rates * year_in_seconds;
+                        }
+
+                      // Write the equilibrium values into the predictor fields themselves.
+                      // These outputs are only interpolated when
+                      // fill_prescribed_fields(true) is called (once, at the end of the
+                      // timestep). That resets the predictors so that the advection solve
+                      // of the next timestep is a single-step prediction starting from
+                      // the equilibrium state, keeping the diagnostics free of any
+                      // accumulated drift.
+                      if (enable_pure_convection_diagnostics && enable_equilibrium_calculation)
+                        {
+                          if (pure_convection_porosity_index != numbers::invalid_unsigned_int)
+                            prescribed_field_out->prescribed_field_outputs[i]
+                            [pure_convection_porosity_index] = eq_melt_fraction;
+
+                          for (unsigned int component_idx = 0; component_idx < n_components; ++component_idx)
+                            {
+                              const unsigned int solid_pc_index
+                                = pure_convection_solid_mass_indices[component_idx];
+                              if (solid_pc_index != numbers::invalid_unsigned_int)
+                                prescribed_field_out->prescribed_field_outputs[i][solid_pc_index]
+                                  = (1.0 - eq_melt_fraction) * c_solid_eq_values[component_idx];
+                            }
+                        }
                     }
                   
                 }  
@@ -1550,6 +1636,50 @@ namespace aspect
           // parse phase suffixes
           component_name_solid_suffix = prm.get ("Phase suffix for solid compositional fields");
           component_name_liquid_suffix = prm.get ("Phase suffix for liquid compositional fields");
+
+          // ---- optional diagnostic "pure convection" predictors ----
+          // All of these fields are optional; if they are absent the diagnostics
+          // are simply disabled and the model behaves exactly as before.
+          enable_pure_convection_diagnostics = false;
+          pure_convection_porosity_index = numbers::invalid_unsigned_int;
+          pure_convection_total_rate_index = numbers::invalid_unsigned_int;
+          pure_convection_solid_mass_indices.assign(n_components, numbers::invalid_unsigned_int);
+          pure_convection_component_rate_indices.assign(n_components, numbers::invalid_unsigned_int);
+
+          if (this->include_melt_transport())
+            {
+              const std::string pure_convection_suffix = "_pure_convection";
+              const auto find_optional_field =
+                [&] (const std::string &field_name) -> unsigned int
+                {
+                  return this->introspection().compositional_name_exists(field_name)
+                         ? this->introspection().compositional_index_for_name(field_name)
+                         : numbers::invalid_unsigned_int;
+                };
+
+              pure_convection_porosity_index
+                = find_optional_field("porosity" + pure_convection_suffix);
+              pure_convection_total_rate_index
+                = find_optional_field("melting_rate" + pure_convection_suffix);
+              pure_convection_porosity_rate_index
+                = find_optional_field("porosity_melting_rate" + pure_convection_suffix);
+
+              for (unsigned int component_idx = 0; component_idx < n_components; ++component_idx)
+                {
+                  pure_convection_solid_mass_indices[component_idx]
+                    = find_optional_field(component_names[component_idx] + "_solid_mass" + pure_convection_suffix);
+                  pure_convection_component_rate_indices[component_idx]
+                    = find_optional_field(component_names[component_idx] + "_melting_rate" + pure_convection_suffix);
+                }
+
+              enable_pure_convection_diagnostics
+                = (pure_convection_porosity_index != numbers::invalid_unsigned_int)
+                  || (pure_convection_total_rate_index != numbers::invalid_unsigned_int);
+              for (unsigned int component_idx = 0; component_idx < n_components; ++component_idx)
+                if (pure_convection_solid_mass_indices[component_idx] != numbers::invalid_unsigned_int
+                    || pure_convection_component_rate_indices[component_idx] != numbers::invalid_unsigned_int)
+                  enable_pure_convection_diagnostics = true;
+            }
 
           melting_point_0_values = 
             Utilities::possibly_extend_from_1_to_N (

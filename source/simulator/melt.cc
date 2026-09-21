@@ -1414,7 +1414,17 @@ namespace aspect
     if (advection_field.field_type != Simulator<dim>::AdvectionField::compositional_field)
       return false;
     else
-      return (this->introspection().name_for_compositional_index(advection_field.compositional_variable) == "porosity");
+      {
+        const std::string field_name
+          = this->introspection().name_for_compositional_index(advection_field.compositional_variable);
+        // The physical porosity field, plus the optional diagnostic
+        // "pure convection" porosity predictor. The latter has to go through the
+        // exact same porosity transport operator (compaction terms and the
+        // cell-averaged velocity divergence) as the physical field, otherwise the
+        // no-reaction prediction would not be comparable with the equilibrium state.
+        return (field_name == "porosity"
+                || field_name == "porosity_pure_convection");
+      }
   }
 
 

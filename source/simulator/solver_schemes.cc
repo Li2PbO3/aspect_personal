@@ -369,7 +369,7 @@ namespace aspect
   // we fill prescribed fields with a method.
   // prepare to call it after compositional field advection.
   template <int dim>
-  void Simulator<dim>::fill_prescribed_fields()
+  void Simulator<dim>::fill_prescribed_fields(const bool include_pure_convection_predictors)
   {
     // [P2-3] Collect all compositional fields that are filled from material model
     // outputs and fill them in a single pass over the mesh. Previously every field
@@ -380,8 +380,26 @@ namespace aspect
     for (unsigned int c=0; c < introspection.n_compositional_fields; ++c)
       {
         const AdvectionField adv_field (AdvectionField::composition(c));
-        if (adv_field.advection_method(introspection) == Parameters<dim>::AdvectionFieldMethod::prescribed_field)
+        const typename Parameters<dim>::AdvectionFieldMethod::Kind method = adv_field.advection_method(introspection);
+        if (method == Parameters<dim>::AdvectionFieldMethod::prescribed_field)
           prescribed_composition_fields.push_back(adv_field);
+        else if (include_pure_convection_predictors
+                 && method == Parameters<dim>::AdvectionFieldMethod::fem_field)
+          {
+            // Diagnostic "pure convection" predictors are ordinary advected fields,
+            // but at the end of every timestep they are reset to the equilibrium
+            // values written by the material model. The advection solve of the next
+            // timestep then predicts one step of pure transport starting from
+            // equilibrium, which is exactly what the melting-rate diagnostics need.
+            const std::string field_name
+              = introspection.name_for_compositional_index(adv_field.compositional_variable);
+            static const std::string pure_convection_suffix = "_pure_convection";
+            if (field_name.size() >= pure_convection_suffix.size()
+                && field_name.compare(field_name.size() - pure_convection_suffix.size(),
+                                      pure_convection_suffix.size(),
+                                      pure_convection_suffix) == 0)
+              prescribed_composition_fields.push_back(adv_field);
+          }
       }
 
     if (!prescribed_composition_fields.empty())
@@ -824,7 +842,9 @@ namespace aspect
     // evaluated with the *previous* timestep's p_f while the stored p_f belongs
     // to the current step. Postprocessing assumes porosity = phi_eq(p_f, T, c),
     // so the two must belong to the same state.
-    fill_prescribed_fields();
+    // This final refresh is also where the diagnostic pure-convection predictors
+    // are reset to their equilibrium values (see the argument's documentation).
+    fill_prescribed_fields(true);
 
     if (parameters.run_postprocessors_on_nonlinear_iterations)
       postprocess ();
@@ -1577,7 +1597,7 @@ namespace aspect
 #define INSTANTIATE(dim) \
   template double Simulator<dim>::assemble_and_solve_temperature(const bool, double*); \
   template std::vector<double> Simulator<dim>::assemble_and_solve_composition(const bool, std::vector<double> *); \
-  template void Simulator<dim>::fill_prescribed_fields(); \
+  template void Simulator<dim>::fill_prescribed_fields(const bool); \
   template double Simulator<dim>::assemble_and_solve_stokes(const bool, double*); \
   template void Simulator<dim>::solve_single_advection_single_stokes(); \
   template void Simulator<dim>::solve_no_advection_iterated_stokes(); \

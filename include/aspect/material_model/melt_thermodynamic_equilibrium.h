@@ -312,6 +312,29 @@ namespace aspect
 
         bool fill_debug_fields;
         bool fill_prescribed_melting_rate_field;
+
+        // ---- diagnostic "pure convection" single-step predictors ----
+        // These are optional. When the parameter file defines advected fields
+        //   porosity_pure_convection
+        //   <component>_solid_mass_pure_convection
+        // (both with method `field`) and prescribed output fields
+        //   melting_rate_pure_convection
+        //   <component>_melting_rate_pure_convection
+        // the model (i) resets the predictors to their equilibrium values at the
+        // end of every timestep, and (ii) reports
+        //   Gamma / rho = (equilibrium - pure-convection prediction) / dt
+        // in units of 1/yr. The predictors are ordinary advected fields with zero
+        // source term, so the physical solution is not affected by them at all.
+        bool enable_pure_convection_diagnostics = false;
+        unsigned int pure_convection_porosity_index = numbers::invalid_unsigned_int;
+        std::vector<unsigned int> pure_convection_solid_mass_indices;
+        unsigned int pure_convection_total_rate_index = numbers::invalid_unsigned_int;
+        std::vector<unsigned int> pure_convection_component_rate_indices;
+        // Optional cross-check: the rate implied by the porosity predictor alone.
+        // It uses ASPECT's porosity transport operator and stabilization, which
+        // differ slightly from the bulk-tracer operator used for the component
+        // rates, so it is reported separately rather than being the total.
+        unsigned int pure_convection_porosity_rate_index = numbers::invalid_unsigned_int;
         
         // select a method to solve the equilibrium 
         std::string equilibrium_solving_method;
