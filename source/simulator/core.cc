@@ -718,23 +718,42 @@ namespace aspect
         // composition boundary conditions and interpolate the composition
         // there
         for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
-          for (const auto p : boundary_composition_manager.get_fixed_composition_boundary_indicators())
-            {
-              VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
-                [&] (const Point<dim> &x) -> double
-              {
-                return boundary_composition_manager.boundary_composition(p, x, c);
-              },
-              introspection.component_masks.compositional_fields[c].first_selected_component(),
-              introspection.n_components);
+          {
+            // The diagnostic "pure convection" predictor fields are advected with a
+            // zero source term and must use the natural (zero-flux) boundary
+            // condition. The solid velocity is zero on these boundaries, so the
+            // natural condition is exactly the conservative zero-flux one.
+            // Imposing a Dirichlet value here would (i) inject a spurious boundary
+            // flux and (ii) overwrite the per-step equilibrium reset at the boundary
+            // nodes, because interpolate_material_outputs_into_advection_fields()
+            // distributes current_constraints when it writes that reset.
+            const std::string boundary_field_name
+              = introspection.name_for_compositional_index(c);
+            static const std::string pure_convection_suffix = "_pure_convection";
+            if (boundary_field_name.size() >= pure_convection_suffix.size()
+                && boundary_field_name.compare(boundary_field_name.size() - pure_convection_suffix.size(),
+                                               pure_convection_suffix.size(),
+                                               pure_convection_suffix) == 0)
+              continue;
 
-              VectorTools::interpolate_boundary_values (*mapping,
-                                                        dof_handler,
-                                                        p,
-                                                        vector_function_object,
-                                                        new_current_constraints,
-                                                        introspection.component_masks.compositional_fields[c]);
-            }
+            for (const auto p : boundary_composition_manager.get_fixed_composition_boundary_indicators())
+              {
+                VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
+                  [&] (const Point<dim> &x) -> double
+                {
+                  return boundary_composition_manager.boundary_composition(p, x, c);
+                },
+                introspection.component_masks.compositional_fields[c].first_selected_component(),
+                introspection.n_components);
+
+                VectorTools::interpolate_boundary_values (*mapping,
+                                                          dof_handler,
+                                                          p,
+                                                          vector_function_object,
+                                                          new_current_constraints,
+                                                          introspection.component_masks.compositional_fields[c]);
+              }
+          }
       }
 
     if (!boundary_composition_manager.allows_fixed_composition_on_outflow_boundaries())
