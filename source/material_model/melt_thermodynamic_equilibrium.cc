@@ -438,7 +438,9 @@ namespace aspect
       {
         inner_melt_fraction = bisection(f_eq_equation,
                                         lower_bound,
-                                        upper_bound);
+                                        upper_bound,
+                                        1000,
+                                        equilibrium_tolerance);
       }
       catch(const std::exception& e)
       {
@@ -1370,6 +1372,16 @@ namespace aspect
                              "The method used to solve the equation for the melt fraction. "
                              "Either bisection or newton.");
 
+          prm.declare_entry ("Equilibrium solving tolerance", "1e-10",
+                             Patterns::Double (0.0),
+                             "Convergence tolerance of the bisection that solves the equilibrium "
+                             "equation. It is a tolerance on the residual of the equilibrium "
+                             "equation sum_i c_s^i - sum_i c_l^i, not on the melt fraction itself. "
+                             "The resulting error in the liquid concentrations is roughly "
+                             "tolerance / |dF/df|; for these parameters |dF/df| is of order 1e3, so "
+                             "the default 1e-10 corresponds to c_l errors of order 1e-13, which is "
+                             "visible as a spurious spatial variation of c_l at that level.");
+
           prm.declare_entry ("Thermal conductivity", "4.7",
                              Patterns::Double (0.),
                              "The value of the thermal conductivity $k$. "
@@ -1532,6 +1544,10 @@ namespace aspect
           fill_prescribed_melting_rate_field = prm.get_bool ("Fill prescribed melting rate field");
 
           equilibrium_solving_method = prm.get ("Equilibrium solving method");
+          equilibrium_tolerance      = prm.get_double ("Equilibrium solving tolerance");
+
+          AssertThrow(equilibrium_tolerance > 0.0,
+                      ExcMessage("The 'Equilibrium solving tolerance' must be positive."));
 
           AssertThrow(this->get_parameters().use_operator_splitting == false,
                       ExcMessage("Error: Material model Melt thermodynamic equilibrium "

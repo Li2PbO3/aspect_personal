@@ -316,6 +316,15 @@ namespace aspect
         // select a method to solve the equilibrium 
         std::string equilibrium_solving_method;
 
+        // Convergence tolerance of the bisection used for the equilibrium
+        // calculation. It is a tolerance on the *residual of the equilibrium
+        // equation*, not on the melt fraction itself; the corresponding error
+        // in the liquid concentrations is roughly tolerance / |dF/df|, which
+        // for these parameters is of the order 1e-10 for the default 1e-10.
+        // Tightening it reduces the spurious spatial variation of c_l (and
+        // hence the q.grad(c_l) term of the melting-rate estimator).
+        double equilibrium_tolerance;
+
         // about chemical component name list
         unsigned int n_components;
 
