@@ -57,8 +57,18 @@ namespace aspect
      *   \approx \frac{\Phi^i(x+\tau\dot x)-\Phi^i(x)}{\tau},
      * @f]
      * where $x = (P, T, \bar c)$ and $\dot x$ is the advective rate of change of
-     * the bulk composition (from the model's own bulk mass flux) and the
-     * finite-difference rates of temperature and fluid pressure.
+     * the bulk composition, taken from the model's own bulk mass flux.
+     *
+     * The temperature and fluid pressure directions are available as optional
+     * perturbations, but they are disabled by default: their rates of change
+     * are only obtainable as a one-step finite difference (the fluid pressure
+     * in particular is a Stokes unknown), they are not tied to any discrete
+     * operator of the model, and they have no counterpart in the liquid
+     * transport term. For a pressure-dependent melting curve they can therefore
+     * produce large structure at the flanks of a porosity wave that is not a
+     * physical melting rate. In the default configuration the estimator is the
+     * composition-driven part of the liquid mass balance, which is the same
+     * quantity the external postprocessing workflow computes.
      *
      * The result is written to `<output directory>/melting_rate_instantaneous/`
      * as one ASCII file per time step, in double precision. Physical units: 1/s.

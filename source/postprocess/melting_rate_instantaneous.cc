@@ -564,17 +564,25 @@ namespace aspect
                             "Whether the bulk composition is perturbed along its advective rate of "
                             "change, computed from the model's own bulk mass flux.");
 
-          prm.declare_entry("Perturb temperature", "true",
+          prm.declare_entry("Perturb temperature", "false",
                             Patterns::Bool(),
                             "Whether the temperature is perturbed along its rate of change, "
                             "evaluated as a finite difference between the current and the previous "
-                            "time step.");
+                            "time step. Disabled by default: this one-step finite difference is not "
+                            "tied to any discrete operator of the model and has no counterpart in "
+                            "the liquid transport term, so it can inject structure that is not a "
+                            "physical melting rate. Kept for future validation.");
 
-          prm.declare_entry("Perturb pressure", "true",
+          prm.declare_entry("Perturb pressure", "false",
                             Patterns::Bool(),
                             "Whether the fluid pressure is perturbed along its rate of change, "
                             "evaluated as a finite difference between the current and the previous "
-                            "time step.");
+                            "time step. Disabled by default. The fluid pressure is a Stokes unknown, "
+                            "so its rate of change is only available as a one-step difference; for "
+                            "cases with a pressure-dependent melting curve (A != 0) this term is "
+                            "large and concentrated where the porosity gradient is steepest, i.e. at "
+                            "the flanks of a porosity wave, and it has no counterpart in the liquid "
+                            "transport term. Kept for future validation.");
 
           prm.declare_entry("Use central difference", "false",
                             Patterns::Bool(),
