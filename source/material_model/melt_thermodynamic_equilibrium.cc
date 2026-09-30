@@ -267,6 +267,7 @@ namespace aspect
     solve_eq_melt_fraction (const double temperature, // to minus ZERO_CELSIUS_IN_KELVIN
                    const double pressure,
                    const std::vector<double> &bulk_concentrations_input,
+                   const double tolerance,
                    // [P2-2] optional outputs, see the declaration in the header
                    std::vector<double> *melting_points_out,
                    std::vector<double> *equilibrium_constants_out) const
@@ -440,7 +441,7 @@ namespace aspect
                                         lower_bound,
                                         upper_bound,
                                         1000,
-                                        equilibrium_tolerance);
+                                        (tolerance > 0.0 ? tolerance : equilibrium_tolerance));
       }
       catch(const std::exception& e)
       {
@@ -503,6 +504,124 @@ namespace aspect
     // However, there have to be a function named melt_fractions
     // because the base class has this function declared as a pure virtual function
     // and we have to implement it
+    // Return the pressure the thermodynamic equilibrium is evaluated at.
+    //
+    // Which pressure that is can be selected at run time (see the parameter
+    // "Pressure for thermodynamic equilibrium").  The default is the reference
+    // (lithostatic) pressure profile, because p_f in a melt-transport model
+    // contains the dynamic pressure and the compaction pressure, and the
+    // latter imprints the compaction-wave structure onto the equilibrium
+    // state.  The compaction pressure is of the order of p_c ~ xi * C with
+    // C = div(u_s) the compaction rate, i.e. five to seven orders of magnitude
+    // below the lithostatic pressure, so it is not a meaningful part of the
+    // thermodynamic state.
+    template <int dim>
+    double
+    MeltThermodynamicEquilibrium<dim>::
+    equilibrium_pressure (const MaterialModel::MaterialModelInputs<dim> &in,
+                          const unsigned int                         q,
+                          const FluidPressureInputs<dim>            *fluid_pressure_input) const
+    {
+      switch (equilibrium_pressure_choice)
+        {
+          case EquilibriumPressure::adiabatic_pressure:
+            // The reference (lithostatic) profile is integrated from the
+            // surface pressure using the laterally averaged reference density,
+            // so it is a smooth function of depth only.  During the very first
+            // time step, while the profile is still being constructed by
+            // evaluating this material model, it is not available yet; fall
+            // back to the pressure passed in with the inputs in that case.
+            if (this->get_adiabatic_conditions().is_initialized())
+              return this->get_adiabatic_conditions().pressure(in.position[q]);
+            return in.pressure[q];
+
+          case EquilibriumPressure::solid_pressure:
+            return in.pressure[q];
+
+          case EquilibriumPressure::fluid_pressure:
+          default:
+            if (fluid_pressure_input != nullptr
+                && fluid_pressure_input->fluid_pressure.size() == in.n_evaluation_points()
+                && std::isfinite(fluid_pressure_input->fluid_pressure[q]))
+              return fluid_pressure_input->fluid_pressure[q];
+            return in.pressure[q];
+        }
+    }
+
+
+    template <int dim>
+    std::vector<MaterialModel::EquilibriumComponent>
+    MeltThermodynamicEquilibrium<dim>::
+    get_equilibrium_components () const
+    {
+      std::vector<MaterialModel::EquilibriumComponent> components;
+      if (!enable_equilibrium_calculation)
+        return components;
+
+      components.reserve(n_components);
+      for (unsigned int component_idx = 0; component_idx < n_components; ++component_idx)
+        components.push_back({component_names[component_idx],
+                              component_name_solid_suffix,
+                              component_name_liquid_suffix});
+      return components;
+    }
+
+
+    template <int dim>
+    bool
+    MeltThermodynamicEquilibrium<dim>::
+    evaluate_equilibrium_state (const double               pressure,
+                                const double               temperature,
+                                const std::vector<double> &bulk_composition,
+                                double                    &melt_fraction,
+                                std::vector<double>       &solid_composition,
+                                std::vector<double>       &liquid_composition,
+                                const double               tolerance) const
+    {
+      if (!enable_equilibrium_calculation)
+        return false;
+
+      AssertThrow(bulk_composition.size() == n_components,
+                  ExcMessage("evaluate_equilibrium_state() was called with "
+                             + Utilities::to_string(bulk_composition.size())
+                             + " bulk concentrations, but this material model uses "
+                             + Utilities::to_string(n_components) + " chemical components."));
+
+      const double temperature_in_celsius = temperature - ZERO_CELSIUS_IN_KELVIN;
+      const double pressure_for_equilibrium = std::max(0.0, pressure);
+
+      melt_fraction = solve_eq_melt_fraction(temperature_in_celsius,
+                                             pressure_for_equilibrium,
+                                             bulk_composition,
+                                             tolerance,
+                                             nullptr,
+                                             nullptr);
+
+      solid_composition.resize(n_components);
+      liquid_composition.resize(n_components);
+      for (unsigned int component_idx = 0; component_idx < n_components; ++component_idx)
+        {
+          // recompute the equilibrium constants for this point; this is what
+          // solve_eq_melt_fraction() uses internally as well
+          const double melting_point = temperature_melting(pressure_for_equilibrium,
+                                                           melting_point_0_values[component_idx],
+                                                           melting_curve_coefficient_A_values[component_idx],
+                                                           melting_curve_coefficient_B_values[component_idx],
+                                                           melting_curve_pressure_thresholds[component_idx]);
+          const double eq_const = equilibrium_constant(temperature_in_celsius,
+                                                       latent_heat_values[component_idx],
+                                                       tuning_parameter_values[component_idx],
+                                                       melting_point);
+          liquid_composition[component_idx] = calculate_concentration_liquid(bulk_composition[component_idx],
+                                                                             melt_fraction,
+                                                                             eq_const);
+          solid_composition[component_idx] = calculate_concentration_solid(bulk_composition[component_idx],
+                                                                           melt_fraction,
+                                                                           eq_const);
+        }
+      return true;
+    }
+
     template <int dim>
     void
     MeltThermodynamicEquilibrium<dim>::
@@ -548,11 +667,7 @@ namespace aspect
       for (unsigned int q=0; q<in.n_evaluation_points(); ++q)
         {
           const double pressure_for_material
-            = (fluid_pressure_input != nullptr
-               && fluid_pressure_input->fluid_pressure.size() == in.n_evaluation_points()
-               && std::isfinite(fluid_pressure_input->fluid_pressure[q]))
-              ? fluid_pressure_input->fluid_pressure[q]
-              : in.pressure[q];
+            = this->equilibrium_pressure(in, q, fluid_pressure_input);
 
           // if (this->get_parameters().use_operator_splitting)
           //   {
@@ -686,11 +801,7 @@ namespace aspect
       for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
         {
           const double pressure_for_material
-            = (fluid_pressure_input != nullptr
-               && fluid_pressure_input->fluid_pressure.size() == in.n_evaluation_points()
-               && std::isfinite(fluid_pressure_input->fluid_pressure[i]))
-              ? fluid_pressure_input->fluid_pressure[i]
-              : in.pressure[i];
+            = this->equilibrium_pressure(in, i, fluid_pressure_input);
 
           // calculate density first, we need it for the reaction term
           // temperature dependence of density is 1 - alpha * (T - T(adiabatic))
@@ -802,6 +913,7 @@ namespace aspect
                                                    this->solve_eq_melt_fraction(temperature_for_equilibrium_calculation,
                                                                                 std::max(0.0, pressure_for_material),
                                                                                 bulk_concentrations,
+                                                                                -1.0,
                                                                                 &melting_points,
                                                                                 &eq_consts) :
                                                    old_melt_fraction);
@@ -1200,11 +1312,7 @@ namespace aspect
           for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
             {
               const double pressure_for_material
-                = (fluid_pressure_input != nullptr
-                   && fluid_pressure_input->fluid_pressure.size() == in.n_evaluation_points()
-                   && std::isfinite(fluid_pressure_input->fluid_pressure[i]))
-                  ? fluid_pressure_input->fluid_pressure[i]
-                  : in.pressure[i];
+                = this->equilibrium_pressure(in, i, fluid_pressure_input);
 
               double porosity = std::max(in.composition[i][porosity_idx],0.0);
               melt_out->fluid_viscosities[i] = eta_f; // TODO: add compositional dependence
@@ -1382,6 +1490,29 @@ namespace aspect
                              "the default 1e-10 corresponds to c_l errors of order 1e-13, which is "
                              "visible as a spurious spatial variation of c_l at that level.");
 
+          prm.declare_entry ("Pressure for thermodynamic equilibrium", "adiabatic pressure",
+                             Patterns::Selection ("fluid pressure|adiabatic pressure|solid pressure"),
+                             "Selects which pressure field is used as the pressure of the "
+                             "thermodynamic equilibrium calculation. "
+                             "'fluid pressure': the melt (fluid) pressure $p_f$, which is the "
+                             "physically consistent choice in a two-phase model, but in a model "
+                             "with melt transport it also contains the dynamic pressure and the "
+                             "compaction pressure, so the equilibrium state inherits the "
+                             "compaction-wave structure. "
+                             "'adiabatic pressure' (default): the reference pressure profile "
+                             "AdiabaticConditions::pressure(), i.e. the lithostatic pressure "
+                             "integrated from the surface pressure with the laterally averaged "
+                             "reference density. It is a smooth, laterally uniform function of "
+                             "depth only, so the equilibrium state is a well-defined function of "
+                             "(depth, temperature, bulk composition) and is free of any "
+                             "compaction-wave imprint. "
+                             "'solid pressure': the total solid pressure $p$, i.e. the pressure "
+                             "variable of the Stokes system. "
+                             "Note that this parameter only affects the thermodynamic equilibrium "
+                             "(the melting temperature and the equilibrium constants). All other "
+                             "uses of the pressure (density, viscosities, melt density) keep "
+                             "using the fluid pressure if melt transport is enabled.");
+
           prm.declare_entry ("Thermal conductivity", "4.7",
                              Patterns::Double (0.),
                              "The value of the thermal conductivity $k$. "
@@ -1545,6 +1676,21 @@ namespace aspect
 
           equilibrium_solving_method = prm.get ("Equilibrium solving method");
           equilibrium_tolerance      = prm.get_double ("Equilibrium solving tolerance");
+
+          // select the pressure field of the thermodynamic equilibrium
+          // calculation; see equilibrium_pressure()
+          const std::string equilibrium_pressure_string
+            = prm.get ("Pressure for thermodynamic equilibrium");
+          if (equilibrium_pressure_string == "fluid pressure")
+            equilibrium_pressure_choice = EquilibriumPressure::fluid_pressure;
+          else if (equilibrium_pressure_string == "adiabatic pressure")
+            equilibrium_pressure_choice = EquilibriumPressure::adiabatic_pressure;
+          else if (equilibrium_pressure_string == "solid pressure")
+            equilibrium_pressure_choice = EquilibriumPressure::solid_pressure;
+          else
+            AssertThrow(false,
+                        ExcMessage("Unknown value '" + equilibrium_pressure_string
+                                   + "' for the parameter 'Pressure for thermodynamic equilibrium'."));
 
           AssertThrow(equilibrium_tolerance > 0.0,
                       ExcMessage("The 'Equilibrium solving tolerance' must be positive."));

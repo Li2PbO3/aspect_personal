@@ -1215,6 +1215,24 @@ namespace aspect
 
 
     /**
+     * Describes one chemical component of a material model that computes a
+     * thermodynamic equilibrium between a solid and a liquid phase.
+     *
+     * The bulk composition of the component is stored in the compositional
+     * field whose name equals @p name; the compositions of the individual
+     * phases live in the fields whose names are @p name + @p solid_field_suffix
+     * and @p name + @p liquid_field_suffix. The solid-phase field is optional,
+     * the other two are required.
+     */
+    struct EquilibriumComponent
+    {
+      std::string name;
+      std::string solid_field_suffix;
+      std::string liquid_field_suffix;
+    };
+
+
+    /**
      * A base class for parameterizations of material models. Classes derived
      * from this class will need to implement functions that provide material
      * parameters such as the viscosity, density, etc, typically as a function
@@ -1354,6 +1372,49 @@ namespace aspect
                                               const LinearAlgebra::BlockVector        &solution,
                                               const FEValuesBase<dim>                 &fe_values,
                                               const Introspection<dim>                &introspection) const;
+
+
+        /**
+         * Return the chemical components for which this material model
+         * computes a solid-liquid thermodynamic equilibrium, or an empty
+         * vector if the model does not compute one.
+         *
+         * This is used by plugins that need to know which compositional fields
+         * participate in the equilibrium (for example initial condition models
+         * that derive the bulk composition from a target melt fraction). The
+         * default implementation returns an empty vector.
+         */
+        virtual
+        std::vector<EquilibriumComponent>
+        get_equilibrium_components () const;
+
+        /**
+         * Evaluate the solid-liquid thermodynamic equilibrium for one point
+         * and return whether the model implements this.
+         *
+         * @param pressure The pressure at which the equilibrium is evaluated,
+         *   in Pa.
+         * @param temperature The temperature, in K.
+         * @param bulk_composition The bulk composition of the chemical
+         *   components returned by get_equilibrium_components(), in the same
+         *   order.
+         * @param melt_fraction The melt fraction (porosity) at equilibrium.
+         * @param solid_composition The equilibrium composition of the solid
+         *   phase, one entry per chemical component.
+         * @param liquid_composition The equilibrium composition of the liquid
+         *   phase, one entry per chemical component.
+         *
+         * The default implementation returns false, i.e. "not implemented".
+         */
+        virtual
+        bool
+        evaluate_equilibrium_state (const double               pressure,
+                                    const double               temperature,
+                                    const std::vector<double> &bulk_composition,
+                                    double                    &melt_fraction,
+                                    std::vector<double>       &solid_composition,
+                                    std::vector<double>       &liquid_composition,
+                                    const double               tolerance = -1.0) const;
 
       protected:
         /**

@@ -223,6 +223,62 @@ namespace aspect
                              std::vector<double> &melt_fractions) const override;
 
         /**
+         * Return the pressure at which the thermodynamic equilibrium should be
+         * evaluated for evaluation point @p q of @p in.
+         *
+         * Which of the available pressure fields is used is selected by the
+         * run-time parameter "Pressure for thermodynamic equilibrium":
+         *
+         * - 'fluid pressure': the melt (fluid) pressure p_f.  This is the
+         *   physically consistent two-phase choice, but in a model with melt
+         *   transport p_f carries the dynamic pressure and the compaction
+         *   pressure, so the thermodynamic equilibrium inherits the
+         *   compaction-wave structure.
+         * - 'adiabatic pressure': the reference lithostatic profile
+         *   AdiabaticConditions::pressure(), integrated downward from the
+         *   surface pressure using the laterally averaged reference density.
+         *   It is a smooth, laterally uniform function of depth only, so the
+         *   equilibrium state becomes a well-defined function of
+         *   (depth, T, c) and is free of any compaction-wave imprint.
+         * - 'solid pressure': the (total) solid pressure p, i.e. the pressure
+         *   variable of the Stokes system.
+         *
+         * Whenever the adiabatic profile is not available yet (it is built
+         * during the first time step by evaluating the material model itself),
+         * this function falls back to the pressure passed in @p in.
+         */
+        double
+        equilibrium_pressure (const MaterialModel::MaterialModelInputs<dim> &in,
+                              const unsigned int                         q,
+                              const FluidPressureInputs<dim>            *fluid_pressure_input) const;
+
+        /**
+         * Return the chemical components for which this model computes a
+         * solid-liquid thermodynamic equilibrium. See the documentation of the
+         * base class.
+         */
+        std::vector<MaterialModel::EquilibriumComponent>
+        get_equilibrium_components () const override;
+
+        /**
+         * Evaluate the equilibrium state for a single point. See the
+         * documentation of the base class. This is a thin wrapper around
+         * solve_eq_melt_fraction() and calculate_concentration_solid/liquid(),
+         * i.e. it uses exactly the same thermodynamics as the time stepping.
+         *
+         * The temperature is expected in K and is converted to degree Celsius
+         * internally, as everywhere else in this model.
+         */
+        bool
+        evaluate_equilibrium_state (const double               pressure,
+                                    const double               temperature,
+                                    const std::vector<double> &bulk_composition,
+                                    double                    &melt_fraction,
+                                    std::vector<double>       &solid_composition,
+                                    std::vector<double>       &liquid_composition,
+                                    const double               tolerance = -1.0) const override;
+
+        /**
          * @name Reference quantities
          * @{
          */
@@ -316,6 +372,23 @@ namespace aspect
         // select a method to solve the equilibrium 
         std::string equilibrium_solving_method;
 
+        /**
+         * Selects which pressure field is used as the pressure of the
+         * thermodynamic equilibrium calculation.
+         */
+        enum class EquilibriumPressure
+        {
+          fluid_pressure,
+          adiabatic_pressure,
+          solid_pressure
+        };
+
+        /**
+         * The pressure field used for the thermodynamic equilibrium
+         * calculation.  See equilibrium_pressure().
+         */
+        EquilibriumPressure equilibrium_pressure_choice = EquilibriumPressure::adiabatic_pressure;
+
         // Convergence tolerance of the bisection used for the equilibrium
         // calculation. It is a tolerance on the *residual of the equilibrium
         // equation*, not on the melt fraction itself; the corresponding error
@@ -403,6 +476,7 @@ namespace aspect
         solve_eq_melt_fraction (const double temperature,
                                 const double pressure,
                                 const std::vector<double> &bulk_concentrations,
+                                const double tolerance = -1.0,
                                 // [P2-2] optional outputs so callers can reuse the
                                 // melting points / equilibrium constants instead of
                                 // recomputing them with extra exp() evaluations

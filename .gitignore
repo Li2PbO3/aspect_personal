@@ -73,3 +73,5 @@ rules.ninja
 
 # local verification scaffolding (A/B runs, baseline binary, per-step diffs)
 /.teq_bench/
+# Large local verification output (the decks and the comparison scripts are tracked)
+/teq_ab/out_*/

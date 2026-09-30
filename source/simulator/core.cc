@@ -676,26 +676,36 @@ namespace aspect
     // evaluate the current boundary temperature and add these constraints as well
     if (!parameters.use_discontinuous_temperature_discretization)
       {
-        // obtain the boundary indicators that belong to Dirichlet-type
-        // temperature boundary conditions and interpolate the temperature
-        // there
-        for (const auto p : boundary_temperature_manager.get_fixed_temperature_boundary_indicators())
-          {
-            VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
-              [&] (const dealii::Point<dim> &x) -> double
+        // A temperature that is filled from the material model outputs
+        // ('prescribed field') is not the solution of any equation: its value is
+        // completely determined by the material model. A Dirichlet boundary value
+        // would (i) prescribe a value that is generally not the value the
+        // material model wants there and (ii) be re-applied on top of the
+        // per-step refill of the prescribed field, because
+        // interpolate_material_output_into_advection_field() distributes
+        // current_constraints when it writes the refilled values. The field
+        // would then keep its initial value on the boundary nodes instead of
+        // following the material model. Skip it here, exactly as for the
+        // compositional fields below.
+        if (parameters.temperature_method
+            != Parameters<dim>::AdvectionFieldMethod::prescribed_field)
+          for (const auto p : boundary_temperature_manager.get_fixed_temperature_boundary_indicators())
             {
-              return boundary_temperature_manager.boundary_temperature(p, x);
-            },
-            introspection.component_masks.temperature.first_selected_component(),
-            introspection.n_components);
+              VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
+                [&] (const dealii::Point<dim> &x) -> double
+              {
+                return boundary_temperature_manager.boundary_temperature(p, x);
+              },
+              introspection.component_masks.temperature.first_selected_component(),
+              introspection.n_components);
 
-            VectorTools::interpolate_boundary_values (*mapping,
-                                                      dof_handler,
-                                                      p,
-                                                      vector_function_object,
-                                                      new_current_constraints,
-                                                      introspection.component_masks.temperature);
-          }
+              VectorTools::interpolate_boundary_values (*mapping,
+                                                        dof_handler,
+                                                        p,
+                                                        vector_function_object,
+                                                        new_current_constraints,
+                                                        introspection.component_masks.temperature);
+            }
       }
 
     if (!boundary_temperature_manager.allows_fixed_temperature_on_outflow_boundaries())
@@ -718,23 +728,50 @@ namespace aspect
         // composition boundary conditions and interpolate the composition
         // there
         for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
-          for (const auto p : boundary_composition_manager.get_fixed_composition_boundary_indicators())
-            {
-              VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
-                [&] (const Point<dim> &x) -> double
-              {
-                return boundary_composition_manager.boundary_composition(p, x, c);
-              },
-              introspection.component_masks.compositional_fields[c].first_selected_component(),
-              introspection.n_components);
+          {
+            // A field that is filled from the material model outputs
+            // ('prescribed field') is not the solution of any partial
+            // differential equation: its value is completely determined by the
+            // material model. Imposing a Dirichlet boundary value on it would
+            // (i) prescribe a value that is generally not the equilibrium value
+            // and (ii) be re-applied on top of the per-step refill of the
+            // prescribed field, because
+            // interpolate_material_outputs_into_advection_fields() distributes
+            // current_constraints when it writes the refilled values. The field
+            // would then keep its initial value (e.g. zero) on the boundary
+            // nodes instead of following the material model.
+            //
+            // This matters in particular for the melt models, where porosity,
+            // the phase concentrations and the melting-rate diagnostics are
+            // prescribed fields: with the boundary condition they were pinned to
+            // their initial values on the top and bottom boundaries while
+            // following the equilibrium in the interior.
+            //
+            // 'prescribed field with diffusion' is deliberately NOT skipped:
+            // that method still solves a diffusion equation, for which a
+            // boundary condition is meaningful.
+            if (parameters.compositional_field_methods[c]
+                == Parameters<dim>::AdvectionFieldMethod::prescribed_field)
+              continue;
 
-              VectorTools::interpolate_boundary_values (*mapping,
-                                                        dof_handler,
-                                                        p,
-                                                        vector_function_object,
-                                                        new_current_constraints,
-                                                        introspection.component_masks.compositional_fields[c]);
-            }
+            for (const auto p : boundary_composition_manager.get_fixed_composition_boundary_indicators())
+              {
+                VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
+                  [&] (const Point<dim> &x) -> double
+                {
+                  return boundary_composition_manager.boundary_composition(p, x, c);
+                },
+                introspection.component_masks.compositional_fields[c].first_selected_component(),
+                introspection.n_components);
+
+                VectorTools::interpolate_boundary_values (*mapping,
+                                                          dof_handler,
+                                                          p,
+                                                          vector_function_object,
+                                                          new_current_constraints,
+                                                          introspection.component_masks.compositional_fields[c]);
+              }
+          }
       }
 
     if (!boundary_composition_manager.allows_fixed_composition_on_outflow_boundaries())

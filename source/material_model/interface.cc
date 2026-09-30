@@ -199,6 +199,34 @@ namespace aspect
 
 
     template <int dim>
+    std::vector<EquilibriumComponent>
+    Interface<dim>::
+    get_equilibrium_components () const
+    {
+      // by default, this model does not compute a thermodynamic equilibrium
+      return {};
+    }
+
+
+
+    template <int dim>
+    bool
+    Interface<dim>::
+    evaluate_equilibrium_state (const double               /*pressure*/,
+                                const double               /*temperature*/,
+                                const std::vector<double> &/*bulk_composition*/,
+                                double                    &/*melt_fraction*/,
+                                std::vector<double>       &/*solid_composition*/,
+                                std::vector<double>       &/*liquid_composition*/,
+                                const double               /*tolerance*/) const
+    {
+      // by default, this model does not compute a thermodynamic equilibrium
+      return false;
+    }
+
+
+
+    template <int dim>
     std::string
     get_valid_model_names_pattern ()
     {

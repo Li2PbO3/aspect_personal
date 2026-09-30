@@ -1,0 +1,53 @@
+{
+  "p_f": {
+    "max_abs_diff": 12288.0,
+    "rms_diff": 531.0065082672926,
+    "max_abs_value": 8063090688.0
+  },
+  "p_c": {
+    "max_abs_diff": 5251.375,
+    "rms_diff": 227.15525037653538,
+    "max_abs_value": 3943685.0
+  },
+  "porosity": {
+    "max_abs_diff": 6.088521331548691e-07,
+    "rms_diff": 7.930403221222588e-08,
+    "max_abs_value": 0.002998665440827608
+  },
+  "T": {
+    "max_abs_diff": 0.0,
+    "rms_diff": 0.0,
+    "max_abs_value": 1587.59814453125
+  },
+  "density": {
+    "max_abs_diff": 0.0,
+    "rms_diff": 0.0,
+    "max_abs_value": 3400.0
+  },
+  "viscosity": {
+    "max_abs_diff": 0.0,
+    "rms_diff": 0.0,
+    "max_abs_value": 9.896585961824806e+23
+  },
+  "permeability": {
+    "max_abs_diff": 8.159309562223065e-20,
+    "rms_diff": 9.269540839145662e-21,
+    "max_abs_value": 2.6963980974772407e-16
+  },
+  "melting_rate": {
+    "max_abs_diff": 1.7741549276230262e-17,
+    "rms_diff": 8.996036766379755e-19,
+    "max_abs_value": 4.341224841796316e-17
+  },
+  "debug_1": {
+    "max_abs_diff": 0.0069446563720703125,
+    "rms_diff": 0.0008703268292096298,
+    "max_abs_value": 200.6220703125
+  },
+  "debug_2": {
+    "max_abs_diff": 0.037726402282714844,
+    "rms_diff": 0.004584040137444445,
+    "max_abs_value": 82.35517883300781
+  },
+  "n_points": 135000
+}

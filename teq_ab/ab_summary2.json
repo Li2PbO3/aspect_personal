@@ -1,0 +1,10 @@
+{
+  "porosity_abs_maxdiff": 6.088521331548691e-07,
+  "porosity_rel_rms": 0.0002001844879373215,
+  "pc_max": 3943685.0,
+  "pc_rms": 471864.9450220151,
+  "pf_minus_linear_max": 5003100000.0,
+  "pf_minus_linear_rms": 2888502938.769745,
+  "pf_min": 3060000000.0,
+  "pf_max": 8063090688.0
+}

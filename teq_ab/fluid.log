@@ -1,0 +1,300 @@
+-----------------------------------------------------------------------------
+-- This is ASPECT, the Advanced Solver for Problems in Earth's ConvecTion.
+--     . version 2.5.0 (melt_rate_postprocess_diag, 390046b3b)
+--     . using deal.II 9.5.1
+--     .       with 32 bit indices and vectorization level 2 (256 bits)
+--     . using Trilinos 13.2.0
+--     . using p4est 2.3.2
+--     . running in OPTIMIZED mode
+--     . running with 8 MPI processes
+-----------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------
+The output directory <teq_ab/out_fluid/> provided in the input file appears not to exist.
+ASPECT will create it for you.
+-----------------------------------------------------------------------------
+
+
+
+   Loading Ascii data initial file /home/zhiqianli/workspace/region5_carbon/case6_practical_0724/initial_temperature_for_carbon_case06_uniphase.txt.
+
+
+   Loading Ascii data initial file /home/zhiqianli/workspace/region5_carbon/case6_practical_0724/initial_composition_for_carbon_case06_uniphase.txt.
+
+-----------------------------------------------------------------------------
+-- For information on how to cite ASPECT, see:
+--   https://aspect.geodynamics.org/citing.html?ver=2.5.0&melt=1&sha=390046b3b&src=code
+-----------------------------------------------------------------------------
+Number of active cells: 15,000 (on 1 levels)
+Number of degrees of freedom: 1,545,052 (180,006+75,002+180,006+30,002+90,003+90,003+90,003+90,003+90,003+90,003+90,003+90,003+90,003+90,003+90,003+90,003)
+
+*** Timestep 0:  t=0 years, dt=0 years
+   Solving temperature system... 0 iterations.
+   Solving dunite system ... 0 iterations.
+   Solving morb system ... 0 iterations.
+   Solving cmorb system ... 0 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 19+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00000
+     Compositions min/max/mass: 0/0.002998/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006667/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // 0/0/0 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Writing depth average:     teq_ab/out_fluid/depth_average
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Timestep 1:  t=17.9452 years, dt=17.9452 years
+   Solving temperature system... 5 iterations.
+   Solving dunite system ... 7 iterations.
+   Solving morb system ... 7 iterations.
+   Solving cmorb system ... 11 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 14+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00001
+     Compositions min/max/mass: 0/0.002998/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006667/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -2.356e-16/2.655e-16/3.15e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Timestep 2:  t=35.8911 years, dt=17.9458 years
+   Solving temperature system... 4 iterations.
+   Solving dunite system ... 3 iterations.
+   Solving morb system ... 3 iterations.
+   Solving cmorb system ... 5 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 10+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00002
+     Compositions min/max/mass: 0/0.002998/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006667/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -2.173e-16/4.295e-17/3.143e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Timestep 3:  t=53.8378 years, dt=17.9467 years
+   Solving temperature system... 3 iterations.
+   Solving dunite system ... 3 iterations.
+   Solving morb system ... 3 iterations.
+   Solving cmorb system ... 5 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 9+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00003
+     Compositions min/max/mass: 0/0.002998/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006666/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -2.028e-16/4.893e-17/3.12e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Timestep 4:  t=71.7856 years, dt=17.9478 years
+   Solving temperature system... 2 iterations.
+   Solving dunite system ... 3 iterations.
+   Solving morb system ... 3 iterations.
+   Solving cmorb system ... 5 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 9+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00004
+     Compositions min/max/mass: 0/0.002998/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006666/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -2.045e-16/5.278e-17/3.124e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Timestep 5:  t=89.7345 years, dt=17.9489 years
+   Solving temperature system... 2 iterations.
+   Solving dunite system ... 3 iterations.
+   Solving morb system ... 3 iterations.
+   Solving cmorb system ... 5 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 9+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00005
+     Compositions min/max/mass: 0/0.002998/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006666/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -2.098e-16/5.386e-17/3.124e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Timestep 6:  t=107.685 years, dt=17.9502 years
+   Solving temperature system... 2 iterations.
+   Solving dunite system ... 3 iterations.
+   Solving morb system ... 3 iterations.
+   Solving cmorb system ... 5 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 11+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00006
+     Compositions min/max/mass: 0/0.002998/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006666/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -2.103e-16/5.393e-17/3.138e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Timestep 7:  t=125.636 years, dt=17.9515 years
+   Solving temperature system... 1 iterations.
+   Solving dunite system ... 4 iterations.
+   Solving morb system ... 4 iterations.
+   Solving cmorb system ... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 11+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00007
+     Compositions min/max/mass: 0/0.002998/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006667/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -2.101e-16/5.371e-17/3.138e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Timestep 8:  t=143.589 years, dt=17.9528 years
+   Solving temperature system... 1 iterations.
+   Solving dunite system ... 3 iterations.
+   Solving morb system ... 3 iterations.
+   Solving cmorb system ... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 9+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00008
+     Compositions min/max/mass: 0/0.002999/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006667/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -2.097e-16/5.354e-17/3.138e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Timestep 9:  t=161.543 years, dt=17.9542 years
+   Solving temperature system... 1 iterations.
+   Solving dunite system ... 3 iterations.
+   Solving morb system ... 3 iterations.
+   Solving cmorb system ... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 9+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00009
+     Compositions min/max/mass: 0/0.002999/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006667/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -2.093e-16/5.355e-17/3.138e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Snapshot created!
+
+*** Timestep 10:  t=179.499 years, dt=17.9556 years
+   Solving temperature system... 0 iterations.
+   Solving dunite system ... 3 iterations.
+   Solving morb system ... 3 iterations.
+   Solving cmorb system ... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 9+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00010
+     Compositions min/max/mass: 0/0.002999/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006666/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -2.096e-16/5.419e-17/3.138e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Timestep 11:  t=197.456 years, dt=17.957 years
+   Solving temperature system... 0 iterations.
+   Solving dunite system ... 3 iterations.
+   Solving morb system ... 3 iterations.
+   Solving cmorb system ... 5 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 9+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00011
+     Compositions min/max/mass: 0/0.002999/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006666/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -2.096e-16/5.427e-17/3.138e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+*** Timestep 12:  t=200 years, dt=2.54431 years
+   Solving temperature system... 0 iterations.
+   Solving dunite system ... 2 iterations.
+   Solving morb system ... 2 iterations.
+   Solving cmorb system ... 4 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 6+0 iterations.
+   Solving fluid velocity system... 6 iterations.
+   Copying properties into prescribed compositional fields (porosity, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3)... done.
+
+   Postprocessing:
+     Writing graphical output:  teq_ab/out_fluid/solution/solution-00012
+     Compositions min/max/mass: 0/0.002999/221.6 // 0.6981/0.7/1.05e+06 // 0.2986/0.2993/4.49e+05 // 0.0006666/0.003332/1081 // 0.003487/0.04936/6.157e+04 // 0.003631/0.08992/6.279e+04 // 0.05602/0.9284/1.147e+06 // -4.341e-17/4.206e-17/3.138e-13 // 0/200.6/4.058e+07 // 0/82.36/1.674e+07 // 0/0.0119/2031
+     RMS, max velocity:         0.000106 m/year, 0.000837 m/year
+     Temperature min/avg/max:   1219 K, 1522 K, 1588 K
+     Maximal melting rate:      1/s (tau = 1 yr
+
+Termination requested by criterion: end time
+
+
++------------------------------------------------+------------+------------+
+| Total wallclock time elapsed since start       |      93.2s |            |
+|                                                |            |            |
+| Section                            | no. calls |  wall time | % of total |
++------------------------------------+-----------+------------+------------+
+| Assemble Stokes system             |        13 |       8.3s |       8.9% |
+| Assemble composition system        |        39 |      32.5s |        35% |
+| Assemble temperature system        |        13 |      11.1s |        12% |
+| Build Stokes preconditioner        |        13 |      3.25s |       3.5% |
+| Build composition preconditioner   |        39 |     0.537s |      0.58% |
+| Build temperature preconditioner   |        13 |     0.175s |      0.19% |
+| Create snapshot                    |         1 |    0.0936s |       0.1% |
+| Initialization                     |         1 |      1.01s |       1.1% |
+| Interpolate prescribed composition |        26 |      8.37s |         9% |
+| Postprocessing                     |        13 |      9.45s |        10% |
+| Setup dof systems                  |         1 |     0.139s |      0.15% |
+| Setup initial conditions           |         1 |     0.748s |       0.8% |
+| Setup matrices                     |         2 |      2.63s |       2.8% |
+| Solve Stokes system                |        13 |      10.7s |        11% |
+| Solve composition system           |        39 |     0.298s |      0.32% |
+| Solve temperature system           |        13 |    0.0827s |         0% |
++------------------------------------+-----------+------------+------------+
+
+-- Total wallclock time elapsed including restarts: 93s
+-----------------------------------------------------------------------------
+-- For information on how to cite ASPECT, see:
+--   https://aspect.geodynamics.org/citing.html?ver=2.5.0&melt=1&sha=390046b3b&src=code
+-----------------------------------------------------------------------------
+FLUID EXIT=0

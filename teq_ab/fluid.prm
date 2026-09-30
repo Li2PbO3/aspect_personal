@@ -1,0 +1,427 @@
+# Cookbook for a global-scale 2D box mantle convection model
+# with melt migration.
+# In this file we will go through all of the steps that are
+# required for adding melting and melt transport to a mantle
+# convection simulation.
+
+# for now this prm file is used to test the "melt_TEQ_bulk" branch.
+
+set Dimension                              = 2
+set Adiabatic surface temperature          = 1623.15 # 1600
+set Maximum time step                      = 100
+set Output directory = teq_ab/out_fluid
+set Use years in output instead of seconds = true
+set Resume computation                     = auto # false # 
+
+# For models with melt migration, there is a nonlinear coupling between
+# the Stokes system, the temperature, and the advection equation for the
+# porosity (several material properties, such as the viscosities and the
+# permeability depend nonlinearly on the porosity; and changes in temperature
+# determine how much material is melting or freezing).
+# Because of that, we use a nonlinear solver scheme ('iterated Advection and Stokes')
+# that iterates between all of these equations, and we have to set its
+# solver tolerance and the maximum number of iterations separately from
+# the linear solver parameters.
+set Nonlinear solver scheme                = single Advection, single Stokes
+# single Advection, no Stokes
+# single Advection, single Stokes 
+# single Advection, iterated Stokes 
+# iterated Advection and Stokes
+set Max nonlinear iterations               = 20
+set Nonlinear solver tolerance             = 1e-5
+
+set Surface pressure = 3.06e9 # about 100 km depth, with 140 km lithosphere
+
+# In addition, melting and freezing normally happens on a much faster
+# time scale than the flow of melt, so we want to decouple the advection
+# of melt (and temperature) and the melting process itself. To do that,
+# we use the operator splitting scheme, and define that for every
+# advection time step, we want to do at least 10 reaction time steps.
+# If these time steps would be larger than 10,000 years, we will do
+# more reaction time steps (so that reaction time step size never exceeds
+# 10,000 years). Here, we also specify the Stokes linear solver tolerance
+# and maximum number of cheap Stokes solver steps to improve the nonlinear
+# convergence behavior.
+set Use operator splitting                     = false
+
+# The end time of the simulation. Because we want to see how upwellings
+# and downwellings evolve over time, and if differences develop between
+# the model with and without melt migration, we set the end time to 200 Ma.
+set End time                               = 200
+
+# subsection Prescribed Stokes solution
+# set Model name = function
+#   subsection Compaction pressure function
+#     set Function expression = 0
+#   end
+#   subsection Fluid pressure function
+#     set Function constants = rho = 3200, g = 9.81, h_bottom = 250000, h_LAB = 150000, h_top = 100000
+#     set Function expression = rho * g * (h_bottom - y)
+#     set Variable names = x,y,t
+#   end
+#   subsection Fluid velocity function
+#     set Function expression = 0; 0
+#     set Variable names = x,y,t
+#   end
+#   subsection Pressure function
+#     set Function constants = rho = 3200, g = 9.81, h_bottom = 250000, h_LAB = 150000, h_top = 100000
+#     set Function expression = rho * g * (h_bottom - y)
+#     set Variable names = x,y,t
+#   end
+#   subsection Velocity function
+#     set Function expression = 0; 0
+#     set Variable names = x,y,t
+#   end
+# end
+
+subsection Solver parameters
+  subsection Stokes solver parameters
+    set Linear solver tolerance = 1e-8
+    set Number of cheap Stokes solver steps = 100
+  end
+end
+
+# We prescribe free-slip boundary conditions on left and right sides.
+subsection Boundary velocity model
+  set Tangential velocity boundary indicators = left, right
+  # set Zero velocity boundary indicators = top, bottom
+  set Prescribed velocity boundary indicators = top: function, bottom: function
+  subsection Function
+    set Function constants  = K_phi_ref=1e-8, mu_f=1, phi_0=0.001, gravity=9.81, rho_s=3400, rho_l=3000
+    set Function expression = 0; 0 # -K_phi_ref*(phi_0^3)*((1-phi_0)^2)*(1-phi_0)*(rho_s-rho_l)*gravity/mu_f * 365.2425*86400
+    set Variable names      = x,y
+  end
+end
+
+# # To Remove nullspace velocity modes, we use the following settings:
+# subsection Nullspace removal
+#   set Remove nullspace = net translation
+# end
+
+subsection Melt settings
+  # In addition, we now also specify in the model settings that we want to
+  # run a model with melt transport.
+  # Must be true if we use the melt thermodynamic equilibrium model.
+  set Include melt transport                  = true
+  set Heat advection by melt                  = true
+  set Use discontinuous compaction pressure = true # false # 
+end
+
+##################### Settings for melt transport ########################
+
+# In models with melt transport, we always need a compositional field with
+# the name 'porosity'. Only the field with that name will be advected with
+# the melt velocity, all other compositional fields will continue to work
+# as before. Material models will typically query for the field with the
+# name porosity to compute all melt material properties.
+# In addition, the 'melt global' material model also requires a field with the
+# name 'peridotite'. This field is used to track how much material has been
+# molten at each point of the model, so it tracks the information how the
+# composition of the rock changes due to partial melting events (sometimes
+# also called depletion). This is important, because usually less melt is
+# generated for a given temperature and pressure if the rock has undergone
+# melting before. Typically, material properties like the density are also
+# different for more or less depleted material.
+subsection Compositional fields
+  set Number of fields = 11
+  set Names of fields = porosity, dunite, morb, cmorb, dunite_liquid, morb_liquid, cmorb_liquid, melting_rate, debug_1, debug_2, debug_3
+  set Compositional field methods = prescribed field, field, field, field, prescribed field, prescribed field, prescribed field, prescribed field, prescribed field, prescribed field, prescribed field
+end
+
+subsection Temperature field
+
+  set Temperature method = field # static # 
+
+end
+
+# subsection Heating model
+#   set List of model names = component phase exchange heating
+# end
+
+subsection Discretization
+  # We also choose relatively large values for the stabilization parameters:
+  # The model resolution is very coarse (in order for this model to run in a
+  # short time), so we want to make sure that no temperature over- and
+  # undershoots will develop. In a model with melting this would be
+  # particularly problematic, as large amounts of melt could be generated
+  # by temperature spikes.
+  # However, note that in an application model with a higher resolution,
+  # we would choose much smaller values for the stabilization parameters.
+  subsection Stabilization parameters
+    set beta  = 0.5
+    set cR    = 1
+  end
+end
+
+##################### Initial conditions ########################
+
+# We choose an adiabatic temperature profile as initial condition,
+# with conductive temperature profiles in the top and bottom boundary
+# layers, which were computed using a half space cooling model.
+# The cold top boundary layer corresponds to an age of 70 Ma,
+# and the hot top boundary layer corresponds to an age of 700 Ma.
+# A small temperature perturbation is added at the bottom of the
+# domain. To make the model asymmetric, we place it in a distance of
+# x = 2900 km from the left boundary.
+# Temperatures from both initial temperature models we specify are
+# added (by default).
+subsection Initial temperature model
+  set List of model names = ascii data
+
+  # subsection Function
+  #   set Function constants        = T_bottom=1273.15, T_top=1273.15, depth=250000
+  #   set Function expression       = T_bottom + (T_top - T_bottom) * (y / depth)
+  # end
+
+  # subsection Function
+  #   set Function constants = T_potential=1623.15, adiabatic_coefficient=1.5696e-7, T_surface=273.15, h_bottom=250000, h_LAB=150000, h_top=100000
+  #   set Function expression = if(h_bottom - y <= h_LAB, T_surface + (T_potential*(1 + adiabatic_coefficient*h_LAB) - T_surface) * ((h_bottom - y)/h_LAB), T_potential*(1 + adiabatic_coefficient*(h_bottom - y)))
+  # end
+
+  subsection Ascii data model
+    set Data directory = /home/zhiqianli/workspace/region5_carbon/case6_practical_0724/
+    set Data file name = initial_temperature_for_carbon_case06_uniphase.txt
+    set Interpolation scheme = linear
+  end
+
+end
+
+# initial pressure field
+subsection Adiabatic conditions model
+  set Model name = compute profile
+  subsection Compute profile
+    set Composition reference profile = initial composition
+    set Number of points = 2000
+    set Use surface condition function = false
+  end
+end
+
+# Now that our model uses compositional fields, we also need initial
+# conditions for the composition.
+# We use the function plugin to set both fields to zero at the beginning
+# of the model run.
+subsection Initial composition model
+
+  set Model name = ascii data
+  subsection Ascii data model
+    set Data directory = /home/zhiqianli/workspace/region5_carbon/case6_practical_0724/
+    set Data file name = initial_composition_for_carbon_case06_uniphase.txt
+    set Interpolation scheme = linear
+  end
+
+end
+
+##################### Boundary conditions ########################
+
+# As boundary conditions for the temperature, we just use the
+# initial conditions again. This temperature is applied as a prescribed
+# temperature at the top and bottom boundary, as specified above.
+subsection Boundary temperature model
+  set Fixed temperature boundary indicators = top, bottom
+  set List of model names = initial temperature
+
+  subsection Initial temperature
+    set Minimal temperature = 293
+    set Maximal temperature = 3900
+  end
+end
+
+# We again choose the initial composition as boundary condition
+# for all compositional fields.
+subsection Boundary composition model
+  set Fixed composition boundary indicators = top, bottom
+  set List of model names = initial composition
+end
+
+# Models with melt transport also need an additional boundary condition:
+# the gradient of the fluid pressure at the model boundaries. This boundary
+# condition indirectly also prescribes boundary conditions for the melt velocity,
+# as the melt velocity is related to the fluid pressure gradient via Darcy's law.
+# If we choose the fluid pressure gradient = solid density * gravity, melt will
+# flow in and out of the model (even if the solid can not flow out) according to
+# the dynamic fluid pressure in the model. Conversely, if we choose the
+# fluid pressure gradient = fluid density * gravity, melt will flow in or out
+# with the same velocity as the solid (so for a closed boundary, no melt will
+# flow in or out). This is what we choose as our boundary condition here.
+subsection Boundary fluid pressure model
+  set Plugin name = density
+
+  subsection Density
+    set Density formulation = average density
+  end
+end
+
+##################### Model geometry ########################
+
+subsection Geometry model
+  set Model name = box
+
+  subsection Box
+    set X extent = 10
+    set Y extent = 150000
+    set Y repetitions = 15000
+  end  
+end
+
+subsection Mesh refinement
+  set Initial global refinement = 0
+  set Coarsening fraction = 0.0
+  set Refinement fraction = 0.0
+  set Initial adaptive refinement = 0
+  set Time steps between mesh refinement = 0
+end
+
+################ Gravity and material properties ##################
+
+# The model has a constant gravity.
+subsection Gravity model
+  set Model name = vertical
+
+  subsection Vertical
+    set Magnitude = 9.81
+  end
+end
+
+# We use the melt thermodynamic equilibrium model
+subsection Material model
+  set Model name = melt thermodynamic equilibrium
+
+  subsection Melt thermodynamic equilibrium
+    set Number of chemical components = 3
+    set Chemical component names = dunite, morb, cmorb
+  
+    # First we describe the parameters for the solid, in the same way
+    # we did in the model without melt transport
+    set Thermal conductivity              = 0 # 4.7
+    set Reference solid density           = 3400
+    set Thermal expansion coefficient     = 0 # 2e-5
+    set Reference shear viscosity         = 1e20 # 1e19 # 5e21
+    set Thermal viscosity exponent        = 0 # 7 # 20 # 7.5 # 
+    # Pressure-temperature Arrhenius viscosity controls.
+    # If either value below is nonzero, both shear and compaction viscosities
+    # use the E+PV dependence (relative to reference_T and surface pressure).
+    set Viscosity activation energy       = 375000 # J/mol; set 0 to disable
+    set Viscosity activation volume       = 0.0 # 6e-6 # m^3/mol; set 0 to disable
+    set Reference temperature             = 1623.15 # 1600
+    set Solid compressibility             = 0 # 4.2e-12, P_ref is surface P, but we don't neet this yet
+
+    # The melt usually has a different (lower) density than the solid.
+    set Reference melt density            = 2800 # 3000
+
+    # The permeability describes how well the pores of a porous material
+    # are connected (and hence how fast melt can flow through the rock).
+    # It is computed as the product of the reference value given here
+    # and the porosity cubed. This means that the lower the porosity is
+    # the more difficult it is for the melt to flow.
+    set Reference permeability            = 1e-8
+
+    # The bulk viscosity describes the resistance of the rock to dilation
+    # and compaction. Melt can only flow into a region that had no melt
+    # before if the matrix of the solid rock expands, so this parameter
+    # also limits how fast melt can flow upwards.
+    # The bulk viscosity is computed as the reference value given here times
+    # a term that scales with one over the porosity. This means that for zero
+    # porosity, the rock can not dilate/compact any more, which is the same
+    # behavior that we have for solid mantle convection.
+    set Reference bulk viscosity          = 1e20 # 1e19
+
+    # Deprecated/disabled in current melt_TEQ_bulk code:
+    # this parameter is parsed for backward compatibility, but not used in
+    # shear or compaction viscosity calculations.
+    set Exponential melt weakening factor = 0 # parsed only, currently ignored
+
+    # In the same way the shear viscosity is reduced with increasing temperature,
+    # we also prescribe the temperature-dependence of the bulk viscosity.
+    set Thermal bulk viscosity exponent   = 0 # 7 # 20 # 7.5 #
+    # Analogous to the compressibility of the solid rock, we also define a
+    # comressibility for the melt (which is generally higher than for the solid).
+    # As we do not want our compressibility to depend on depth, we set the
+    # pressure derivative to zero.
+    set Melt compressibility              = 0 # 1.25e-11
+
+    # Finally, we prescribe the viscosity of the melt, which is used in Darcy's
+    # law. The lower this viscosity, the faster melt can flow.
+    set Reference melt viscosity          = 0.005 # 0.002 # 1 #
+
+    # We also have to determine how fast melting and freezing should happen.
+    # Here, we choose a time scale of 10,000 years, which is a relatively long time
+    # (or in other words, slow melting rate), but because this is a global model
+    # and the time steps are big, it should be sufficient.
+    set Melting time scale for operator splitting = 1e4
+
+    set Equilibrium solving method = bisection
+    set Pressure for thermodynamic equilibrium = fluid pressure
+    set Enable equilibrium calculation = true
+    set Enable chemical reaction rate = true
+    set Fill debug fields = true # false # 
+    set Fill prescribed melting rate field = true # false # 
+    
+    set Melting point for each component at surface = 1780, 1000, 617.28 # deg C
+    set Melting curve coefficient A for each component = 45.0e-9, 112.0e-9, 38.0e-9 # 0.0, 0.0, 0.0 # 
+    set Melting curve coefficient B for each component = -2.00e-18, -3.37e-18, -4.00e-18 # 0.0e-18, 0.0e-18, 0.0e-18 # 
+    set Melting curve pressure threshold for each component = 6e9, 6e9, 4.4e9
+    set Latent heat for each component = 600000, 450000, 350000
+    set Tuning parameter for each component = 60, 30, 30
+
+    # test of background porosity
+    set Background porosity = 0.0
+
+  end
+end
+
+##################### Postprocessing ########################
+
+# In addition to the visualization output, we select a number
+# of postprocessors that allow us to compute some statistics
+# about the output (to see how much the model without and the
+# model with melt migration differ), and in particular we use
+# the "depth average" postprocessor that will allow us to plot
+# depth-averaged model quantities over time.
+subsection Postprocess
+  set List of postprocessors = visualization, composition statistics, velocity statistics, temperature statistics, depth average, melting rate instantaneous
+  subsection Melting rate instantaneous
+    set Virtual time step = 1.0
+    # 只保留「成分驱动」的熔融，与既有外部后处理法（plot_melting_rate_external）的 Γ 定义一致。
+    # 温度/压力扰动现在在插件里默认关闭（一步差分不可靠，且与液相输运项不配对，会在孔隙波
+    # 两侧的陡梯度处制造尖峰），这里不再显式覆盖。
+    set Use cell averaged form = true
+    set Zero where no melt = true
+    set Melt fraction threshold = 1e-12
+    # 225 km 处 200 ppm 背景的 tie-line 端点，仅用于 tie_line_f_spread 诊断
+    set Tie line solid composition = 0.7000698932600512, 0.29936232360545284, 0.000567783134500377
+    set Tie line liquid composition = 0.04884452375448118, 0.029247570634147547, 0.9219079055690094
+  end
+
+  # For the model with melt migration, also add a visualization
+  # postprocessor that computes the material properties relevant
+  # to migration (permeability, viscosity of the melt, etc.).
+
+  subsection Visualization
+    set List of output variables      = material properties, nonadiabatic temperature, strain rate, melt material properties
+    set Number of grouped files       = 0
+    set Output format                 = vtu
+    # set Time between graphical output = 1000.0
+    set Time steps between graphical output = 1 # 10 #
+
+    subsection Material properties
+      set List of material properties = density, viscosity, thermal expansivity
+    end
+
+    subsection Melt material properties
+      set List of properties = fluid density, permeability, fluid viscosity, compaction viscosity
+    end
+  end
+
+  # subsection Depth average
+  #   set Number of zones = 12
+  #   set Time between graphical output = 1000.0
+  # end
+end
+
+# We write a checkpoint approximately every half an hour,
+# so that we are able to restart the computation from that
+# point.
+subsection Checkpointing
+  # set Time between checkpoint = 1700
+  set Steps between checkpoint = 10
+end
